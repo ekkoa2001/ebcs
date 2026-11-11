@@ -1,0 +1,1 @@
+syncFilter();render();if(shared)setInterval(()=>{if(document.querySelector('dialog[open]'))return;try{let q=new XMLHttpRequest();q.open('GET','/api/state',false);q.send();if(q.status===200){let x=JSON.parse(q.responseText);if(x.version!==version){version=x.version;entries=x.entries||[];render()}}}catch{}},5000);

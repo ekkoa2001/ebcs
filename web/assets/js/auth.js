@@ -1,0 +1,3 @@
+$('changePassword').onclick=()=>{$('passwordForm').reset();accountMessage('passwordError',null);$('passwordDialog').showModal()};$('closePassword').onclick=()=>$('passwordDialog').close();$('passwordForm').onsubmit=async e=>{e.preventDefault();if($('updatedPassword').value!==$('confirmPassword').value){accountMessage('passwordError',new Error('两次新密码不一致'));return}try{await accountRequest('/api/password',{current:$('currentPassword').value,password:$('updatedPassword').value});location.reload()}catch(err){accountMessage('passwordError',err)}};$('logout').onclick=async()=>{try{await accountRequest('/api/logout',{});location.reload()}catch(e){alert(e.message)}};
+
+

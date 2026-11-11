@@ -44,9 +44,19 @@ def media_store(c,value):
     return value
 
 class Handler(base.Handler):
+    def serve_asset(self,path,ses):
+        if not path.startswith(('/assets/','/modules/','/vendor/')):return False
+        if '\\' in path or '..' in path.split('/'):return base.respond(self,400,{'error':'无效的访问地址'}) or True
+        file=(base.PAGES/path.lstrip('/')).resolve();root=base.PAGES.resolve()
+        if file!=root and root not in file.parents:return base.respond(self,400,{'error':'无效的访问地址'}) or True
+        if file.suffix not in ('.js','.css') or not file.is_file():return base.respond(self,404,{'error':'文件不存在'}) or True
+        if path!='/vendor/gsap.min.js' and not ses:return base.respond(self,401,{'error':'请先登录'}) or True
+        raw=file.read_bytes();ctype='text/css; charset=utf-8' if file.suffix=='.css' else 'text/javascript; charset=utf-8'
+        self.send_response(200);self.security_headers(ctype);self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return True
     def do_GET(self):
         if not self.allowed_host():return base.respond(self,400,{'error':'无效的访问地址'})
         path=urlparse(self.path).path;ses=self.session()
+        if self.serve_asset(path,ses):return
         if path in ('/','/index.html','/admin'):
             if not ses:
                 raw=(base.PAGES/'login.html').read_bytes().replace(
@@ -57,19 +67,12 @@ class Handler(base.Handler):
             with base.LOCK,connect() as c:p=profile(c,ses['username'])
             if p['mustChange']:return base.html(self,200,(base.PAGES/'first-password.html').read_bytes())
             if path=='/admin' and ses['role']!='admin':return base.respond(self,403,{'error':'仅管理员可访问管理端'})
-            raw=(base.PAGES/'index.html').read_bytes().replace(b'</head>',b'<link rel="stylesheet" href="/ui-fixes.css?v=20261104c"></head>')
-            raw=raw.replace(b'/team-client.js',b'/team-client.js?v=20261104c').replace(b'/workshop.js',b'/workshop.js?v=20261104c')
-            return base.html(self,200,raw)
-        if path in ('/workshop.js','/workshop.css','/ui-fixes.css','/gsap.min.js'):
-            if path!='/gsap.min.js' and not ses:return base.respond(self,401,{'error':'请先登录'})
-            raw=(base.PAGES/path[1:]).read_bytes();self.send_response(200);self.security_headers('text/css' if path.endswith('.css') else 'text/javascript');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
+            return base.html(self,200,(base.PAGES/'index.html').read_bytes())
         if not ses:return base.respond(self,401,{'error':'请先登录'})
         with base.LOCK,connect() as c:
             p=profile(c,ses['username'])
             if path=='/api/session':return base.respond(self,200,{'username':ses['username'],'role':ses['role'],'csrf':ses['csrf'],'profile':p})
             if p['mustChange']:return base.respond(self,403,{'error':'请先修改初始密码'})
-            if path=='/team-client.js':
-                raw=(base.PAGES/'team-client.js').read_bytes();self.send_response(200);self.security_headers('text/javascript; charset=utf-8');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
             if path.startswith('/media/'):
                 row=c.execute('SELECT mime,data FROM media WHERE id=?',(path[7:],)).fetchone()
                 if not row:return base.respond(self,404,{'error':'图片不存在'})
