@@ -1,0 +1,4 @@
+GSAP 3.15.0 is bundled locally. Copyright GreenSock. The license notice in gsap.min.js is retained.
+Installation documentation: https://gsap.com/docs/v3/Installation/
+License: https://gsap.com/standard-license/
+The login animation has reduced-motion and no-library fallbacks.

@@ -1,0 +1,27 @@
+/* Compact card actions: evaluation and view share one row. */
+.inline-comments{margin-top:10px!important;padding-top:10px!important}
+.inline-comments form{display:none!important}
+.comment-heading{font-size:12px;font-weight:600;color:#8491a4;margin-bottom:4px}
+.comment-line{padding:6px 0!important}
+.comment-line p{margin:4px 0!important}
+.card footer{display:flex!important;align-items:center!important;gap:8px!important}
+.card footer>span{margin-right:auto}
+.card footer .comment-add,.card footer [data-open],.card footer [data-metrics]{flex:0 0 auto;white-space:nowrap;margin-left:0!important;background:#2878d0!important;color:#fff!important;transform:none!important;box-shadow:none!important;transition:background-color .16s ease,color .16s ease!important}
+.card footer .comment-add:hover,.card footer [data-open]:hover,.card footer [data-metrics]:hover{background:#175eaa!important;color:#fff!important;transform:none!important;box-shadow:none!important}
+
+/* Dense ad tables scroll horizontally and never wrap records or actions. */
+#metricRows{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.period-table{width:max-content!important;min-width:1720px!important;table-layout:auto!important}
+.period-table th,.period-table td{white-space:nowrap!important;word-break:keep-all!important;vertical-align:middle!important;padding:12px 10px!important}
+.period-table th:first-child,.period-table td:first-child{min-width:185px}
+.period-table th:nth-child(2),.period-table td:nth-child(2){min-width:190px}
+.period-table th:nth-child(3),.period-table td:nth-child(3){min-width:130px}
+.period-actions{display:flex;gap:6px;align-items:center;white-space:nowrap}
+.period-actions button{margin:0!important;white-space:nowrap!important}
+
+/* Asset previews remain neutral; only the explicit action changes on hover. */
+.asset-card,.asset-card:hover{transform:none!important}
+.asset-image,.asset-image:hover,.asset-image:focus,.asset-image:active{background:#f8fafc!important;color:inherit!important;transform:none!important;box-shadow:none!important;outline:none!important;cursor:zoom-in}
+.asset-image img{transition:none!important}
+.asset-card footer [data-open]{background:#eef4ff!important;color:#175cd9!important;box-shadow:none!important}
+.asset-card footer [data-open]:hover{background:#dceaff!important;color:#124eaf!important;transform:none!important}
