@@ -275,6 +275,8 @@ class Handler(base.Handler):
                 c.execute('INSERT OR REPLACE INTO archive VALUES(?,?,?,?)',(id,json.dumps(old[id],ensure_ascii=False),ses['username'],now()))
                 c.execute('INSERT INTO revisions(actor,time,entry_id,before_json,after_json) VALUES(?,?,?,?,?)',(ses['username'],now(),id,json.dumps(old[id],ensure_ascii=False),'null'));base.log(c,ses['username'],'删除 '+old[id]['title'])
             c.execute('UPDATE state SET version=?,entries=? WHERE id=1',(version+1,json.dumps(list(new.values()),ensure_ascii=False)));c.commit()
+        from app.services.creative_hooks import synchronize_from_entries
+        synchronize_from_entries(list(new.values()),ses['username'])
         return base.respond(self,200,{'version':version+1,'entries':list(new.values())})
 
 base.Handler=Handler

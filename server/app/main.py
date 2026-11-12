@@ -71,6 +71,8 @@ async def lifespan(_app: FastAPI):
         if count == 0:
             from app.import_postgres import copy_database
             copy_database(settings["database_path"])
+    from app.services.creative_hooks import synchronize_from_legacy_state
+    synchronize_from_legacy_state()
     try:
         backup_database()
     except Exception:
