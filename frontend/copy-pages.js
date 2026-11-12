@@ -1,0 +1,6 @@
+const { cpSync, mkdirSync } = require("node:fs")
+const { resolve } = require("node:path")
+const output = resolve(__dirname, "dist")
+mkdirSync(output, { recursive: true })
+cpSync(resolve(__dirname, "../web"), output, { recursive: true })
+console.log("copied")

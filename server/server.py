@@ -3,7 +3,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from http.cookies import SimpleCookie
 from datetime import datetime
-import sqlite3, json, threading, socket, ssl, secrets, hashlib, hmac, time, getpass, sys
+import contextvars, os, sqlite3, json, threading, socket, ssl, secrets, hashlib, hmac, time, getpass, sys
 
 HERE=Path(__file__).resolve().parent
 ROOT=HERE.parent
@@ -15,6 +15,7 @@ LOCK=threading.RLock()
 SESSIONS={}
 ATTEMPTS={}
 IP_ATTEMPTS={}
+REQUEST_META=contextvars.ContextVar('request_meta', default={})
 ROLES=('admin','editor','viewer')
 ITERATIONS=600000
 MAX_SESSION=8*60*60
@@ -24,8 +25,22 @@ class ClosingConnection(sqlite3.Connection):
         try:return super().__exit__(*args)
         finally:self.close()
 
+def database_file():
+    override=os.environ.get('EKKO_DB')
+    return Path(override) if override else DB
+
 def connect():
-    c=sqlite3.connect(DB,timeout=20,factory=ClosingConnection)
+    url=os.environ.get('DATABASE_URL','')
+    if url.startswith('postgres'):
+        from app.sqlcompat import connect as postgres
+        c=postgres(url)
+        c.execute('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY, version INTEGER NOT NULL, entries TEXT)')
+        c.execute('INSERT OR IGNORE INTO state(id,version,entries) VALUES(1,0,NULL)')
+        c.execute('CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY, time TEXT, actor TEXT, action TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY COLLATE NOCASE, salt BLOB NOT NULL, password_hash BLOB NOT NULL, role TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)')
+        c.commit()
+        return c
+    c=sqlite3.connect(database_file(),timeout=20,factory=ClosingConnection)
     c.execute('PRAGMA busy_timeout=20000')
     c.execute('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY, version INTEGER NOT NULL, entries TEXT)')
     c.execute('INSERT OR IGNORE INTO state(id,version,entries) VALUES(1,0,NULL)')
@@ -41,6 +56,15 @@ def valid_name(name):return isinstance(name,str) and 1<=len(name)<=64 and all(ch
 def valid_password(password):return isinstance(password,str) and 12<=len(password)<=200
 
 def password_hash(password,salt):return hashlib.pbkdf2_hmac('sha256',password.encode('utf-8'),salt,ITERATIONS)
+def password_matches(password,salt,stored):
+    raw=bytes(stored or b'')
+    if raw.startswith(b'$argon2'):
+        from argon2 import PasswordHasher
+        from argon2.exceptions import VerificationError
+        try:return PasswordHasher().verify(raw.decode(),password)
+        except VerificationError:return False
+    if not salt:return False
+    return hmac.compare_digest(password_hash(password,salt),raw)
 def create_user(c,name,password,role):
     if not valid_name(name) or not valid_password(password) or role not in ROLES:raise ValueError('账号、密码或权限不符合要求')
     salt=secrets.token_bytes(16)
@@ -148,8 +172,8 @@ class Handler(BaseHTTPRequestHandler):
             ip_attempts=[x for x in IP_ATTEMPTS.get(ip,[]) if now-x<900];IP_ATTEMPTS[ip]=ip_attempts
             if len(attempts)>=5 or len(ip_attempts)>=25:return respond(self,429,{'error':'登录尝试过多，请 15 分钟后再试。'})
             with connect() as c:row=c.execute('SELECT username,salt,password_hash,role,active FROM users WHERE username=?',(name,)).fetchone()
-        salt=row[1] if row else bytes(16);expected=row[2] if row else bytes(32)
-        matched=hmac.compare_digest(password_hash(pw,salt),expected)
+        salt=row[1] if row else b'';expected=row[2] if row else b''
+        matched=password_matches(pw,salt,expected)
         if not row or not row[4] or not matched:
             with LOCK:
                 ATTEMPTS.setdefault(key,[]).append(now);IP_ATTEMPTS.setdefault(ip,[]).append(now)
@@ -159,7 +183,12 @@ class Handler(BaseHTTPRequestHandler):
             for old_token,old_session in list(SESSIONS.items()):
                 if now-old_session['created']>MAX_SESSION:SESSIONS.pop(old_token,None)
             token=secrets.token_urlsafe(32);SESSIONS[token]={'username':row[0],'csrf':secrets.token_urlsafe(32),'created':now}
-            with connect() as c:log(c,row[0],'登录成功');c.commit()
+            with connect() as c:
+                log(c,row[0],'登录成功')
+                meta=REQUEST_META.get()
+                try:c.execute('INSERT INTO activity_logs(time,actor,module,action,object_type,object_id,result,ip,user_agent,repeat_count) VALUES(?,?,?,?,?,?,?,?,?,1)',(datetime.now().strftime('%Y-%m-%d %H:%M:%S'),row[0],str(meta.get('module','v1'))[:40],'登录成功','','','success',str(meta.get('ip',''))[:64],str(meta.get('ua',''))[:300]))
+                except Exception:pass
+                c.commit()
         cookie='sana_session='+token+'; Path=/; HttpOnly; SameSite=Strict; Max-Age='+str(MAX_SESSION)+('; Secure' if self.server.secure else '')
         return respond(self,200,{'ok':True},cookie)
     def save_state(self,ses,body):

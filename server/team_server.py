@@ -40,7 +40,13 @@ def media_store(c,value):
         head,payload=value.split(',',1)
         try:raw=base64.b64decode(payload,validate=True)
         except:return value
-        key=hashlib.sha256(raw).hexdigest();c.execute('INSERT OR IGNORE INTO media VALUES(?,?,?)',(key,head[5:-7],raw));return '/media/'+key
+        key=hashlib.sha256(raw).hexdigest();c.execute('INSERT OR IGNORE INTO media VALUES(?,?,?)',(key,head[5:-7],raw))
+        try:
+            from app.object_store import put_object
+            put_object(key, head[5:-7], raw)
+        except Exception:
+            pass
+        return '/media/'+key
     return value
 
 class Handler(base.Handler):
@@ -74,9 +80,22 @@ class Handler(base.Handler):
             if path=='/api/session':return base.respond(self,200,{'username':ses['username'],'role':ses['role'],'csrf':ses['csrf'],'profile':p})
             if p['mustChange']:return base.respond(self,403,{'error':'请先修改初始密码'})
             if path.startswith('/media/'):
-                row=c.execute('SELECT mime,data FROM media WHERE id=?',(path[7:],)).fetchone()
-                if not row:return base.respond(self,404,{'error':'图片不存在'})
-                self.send_response(200);self.security_headers(row[0]);self.send_header('Content-Security-Policy',"sandbox; default-src 'none'; style-src 'unsafe-inline'");self.send_header('Content-Length',str(len(row[1])));self.end_headers();self.wfile.write(row[1]);return
+                key=path[7:]
+                row=c.execute('SELECT mime,data FROM media WHERE id=?',(key,)).fetchone()
+                raw=None
+                mime=row[0] if row else 'application/octet-stream'
+                try:
+                    from app.object_store import get_object
+                    raw=get_object(key)
+                except Exception:
+                    raw=None
+                if raw is None and row:raw=row[1]
+                if raw is None:
+                    disk=base.DATA/'media'/'originals'/key
+                    if disk.is_file():raw=disk.read_bytes()
+                if raw is None:return base.respond(self,404,{'error':'图片不存在'})
+                if isinstance(raw,memoryview):raw=raw.tobytes()
+                self.send_response(200);self.security_headers(mime);self.send_header('Content-Security-Policy',"sandbox; default-src 'none'; style-src 'unsafe-inline'");self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
             if path=='/api/presence':
                 base.SESSIONS[ses['token']]['activeAt']=time.time()
                 users={x['username'] for x in base.SESSIONS.values() if time.time()-x.get('activeAt',0)<120}

@@ -23,7 +23,7 @@ if (-not $running) {
     }
     $logDir = Join-Path $PSScriptRoot 'logs'
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-    $process = Start-Process -FilePath $pythonExecutable -ArgumentList 'team_server.py' -WorkingDirectory $serviceDir -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDir 'server-output.log') -RedirectStandardError (Join-Path $logDir 'server-error.log') -PassThru
+    $process = Start-Process -FilePath $pythonExecutable -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port',"$port" -WorkingDirectory $serviceDir -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDir 'server-output.log') -RedirectStandardError (Join-Path $logDir 'server-error.log') -PassThru
     $process.Id | Set-Content -LiteralPath (Join-Path $logDir 'server.pid')
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         Start-Sleep -Milliseconds 250
