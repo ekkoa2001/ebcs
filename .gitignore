@@ -11,6 +11,7 @@ htmlcov/
 frontend/node_modules/
 frontend/dist/
 frontend/empty/
+frontend/.gitignore
 tests/visual/node_modules/
 tests/visual/test-results/
 tests/visual/playwright-report/
