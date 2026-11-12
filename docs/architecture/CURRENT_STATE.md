@@ -27,6 +27,10 @@ Docker 环境另行提供 PostgreSQL、Redis 和 MinIO，但并不代表所有�
 - PostgreSQL、Redis、MinIO、Nginx 的 Docker Compose 底座。
 - 会话、RBAC、审计、对象存储的部分基础能力。
 - V1 视觉基线截图和 Playwright 配置。
+- 用户、登录、密码、个人资料、团队、RBAC、会话撤销和结构化审计已迁移到独立服务。
+- 老 UI 的身份与账号管理地址已经接入新服务，页面外观和调用方式不变。
+- PostgreSQL 建表依赖排序和旧游标兼容问题已修复。
+- Docker 环境已通过完整启动验证，首页返回 200。
 
 ## 尚未完成
 

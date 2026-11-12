@@ -79,7 +79,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Ekko Script Web", version="2", docs_url=None, redoc_url=None, lifespan=lifespan)
-for item in (auth.router, users.router, admin.router, creative.router, content.router, marketing.router, analytics.router, competitors.router, comments.router, notifications.router, media.router):
+for item in (auth.router, auth.compat_router, users.router, users.compat_router, admin.router, admin.compat_router, creative.router, content.router, marketing.router, analytics.router, competitors.router, comments.router, notifications.router, media.router):
     app.include_router(item)
 
 

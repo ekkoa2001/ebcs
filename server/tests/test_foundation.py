@@ -1,4 +1,5 @@
 import pytest
+from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -47,14 +48,15 @@ def test_new_auth_session_and_audit_are_available():
 
 def test_viewer_cannot_change_state_or_read_audit():
     admin = login()
+    username = "testviewer_" + uuid4().hex[:10]
     created = client.post(
         "/api/users/create",
-        json={"username": "phase2viewer", "role": "viewer", "password": "phase2-viewer", "active": True},
+        json={"username": username, "role": "viewer", "password": "phase2-viewer", "active": True},
         headers={**ORIGIN, "X-CSRF-Token": admin["csrf"]},
     )
     assert created.status_code == 200, created.text
     client.post("/api/logout", json={}, headers={**ORIGIN, "X-CSRF-Token": admin["csrf"]})
-    viewer = login("phase2viewer", "phase2-viewer")
+    viewer = login(username, "phase2-viewer")
     forbidden = client.post("/api/state", json={"version": 1, "entries": []}, headers={**ORIGIN, "X-CSRF-Token": viewer["csrf"]})
     assert forbidden.status_code == 403
     assert client.get("/api/v1/admin/activity-logs").status_code == 403
@@ -73,3 +75,41 @@ def test_pages_still_render_for_anonymous_and_admin():
     asset = client.get("/assets/css/tokens.css")
     assert asset.status_code == 200
     assert "box-sizing" in asset.text
+
+
+def test_disabling_a_user_revokes_existing_sessions():
+    admin = login()
+    username = "revoked_" + uuid4().hex[:10]
+    password = "temporary-pass-123"
+    created = client.post(
+        "/api/v1/users",
+        json={"username": username, "role": "editor", "password": password, "active": True},
+        headers={**ORIGIN, "X-CSRF-Token": admin["csrf"]},
+    )
+    assert created.status_code == 200, created.text
+    client.post("/api/logout", json={}, headers={**ORIGIN, "X-CSRF-Token": admin["csrf"]})
+
+    member = login(username, password)
+    member_token = client.cookies.get("sana_session")
+    assert member_token
+    assert member["username"] == username
+    client.cookies.clear()
+
+    admin = login()
+    disabled = client.post(
+        "/api/users/update",
+        json={"username": username, "role": "editor", "password": "", "active": False},
+        headers={**ORIGIN, "X-CSRF-Token": admin["csrf"]},
+    )
+    assert disabled.status_code == 200, disabled.text
+
+    client.cookies.set("sana_session", member_token)
+    assert client.get("/api/session").status_code == 401
+    client.cookies.clear()
+
+
+def test_legacy_activity_endpoint_reads_new_audit_log():
+    login()
+    response = client.get("/api/log")
+    assert response.status_code == 200
+    assert any(row["action"] == "登录成功" for row in response.json())
