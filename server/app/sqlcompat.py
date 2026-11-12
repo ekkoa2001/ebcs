@@ -32,6 +32,14 @@ class Result:
         self.rows = list(rows or [])
         self.rowcount = rowcount
 
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if not self.rows:
+            raise StopIteration
+        return self.rows.pop(0)
+
     def fetchone(self):
         return self.rows.pop(0) if self.rows else None
 

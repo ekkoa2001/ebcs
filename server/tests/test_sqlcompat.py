@@ -1,6 +1,6 @@
 import pytest
 
-from app.sqlcompat import translate
+from app.sqlcompat import Result, translate
 
 
 def test_insert_ignore_becomes_conflict_nothing():
@@ -26,3 +26,10 @@ def test_configured_redis_does_not_fall_back_when_down(monkeypatch):
     import app.redis_sessions as sessions
     with pytest.raises(Exception):
         sessions.attach()
+
+
+def test_result_is_sqlite_cursor_compatible():
+    result = Result([(1, "first"), (2, "second")], rowcount=2)
+
+    assert list(result) == [(1, "first"), (2, "second")]
+    assert result.fetchone() is None

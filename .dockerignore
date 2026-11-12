@@ -1,0 +1,10 @@
+.git
+.gitignore
+/data
+/docs
+/frontend
+/logs
+/tests
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
