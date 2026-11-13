@@ -122,3 +122,28 @@ input[data-date-picker]::-webkit-calendar-picker-indicator{pointer-events:none;o
 .business-comments-dialog .modal{width:100%!important;max-width:none!important;box-sizing:border-box!important}.business-comments-dialog .comment-compose{display:grid!important;grid-template-columns:1fr auto!important;gap:10px!important}.business-comments-dialog .comment-compose input,.business-comments-dialog .comment-compose textarea{min-width:0!important}.business-comments-dialog .comment-compose .field{display:grid!important;gap:7px}.business-comments-dialog .comment-compose textarea{min-height:104px!important;resize:vertical!important}.business-comments-dialog .comment-compose button{align-self:end!important}
 @media(max-width:1180px){#listView>.tools{grid-template-columns:minmax(220px,2fr) repeat(2,minmax(130px,1fr)) max-content!important}.business-tools{grid-template-columns:minmax(220px,2fr) minmax(130px,1fr) max-content max-content!important}.business-editor .editor-section .fields{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @media(max-width:760px){.wrap,.business-workspace{padding-left:16px!important;padding-right:16px!important}.creative-count,.type-compass>div{max-width:none!important}.business-editor-dialog{width:calc(100vw - 20px)!important;max-height:calc(100vh - 20px)!important}.business-editor{padding:0 16px 18px!important}.business-editor .editor-section .fields,#listView>.tools,.business-tools{grid-template-columns:1fr!important}.asset-rail{grid-template-columns:1fr!important}.business-comments-dialog .comment-compose{grid-template-columns:1fr!important}.image-lightbox{width:calc(100vw - 20px)!important;height:calc(100vh - 20px)!important}}
+
+/* Final workspace pass: title at left, controls in the title row at right. */
+.creative-title-row,.business-title-row{display:grid!important;grid-template-columns:minmax(260px,.76fr) minmax(0,1.9fr)!important;gap:clamp(24px,4vw,68px)!important;align-items:end!important;margin:0 0 18px!important}
+.creative-title-row .tools,.business-title-row .business-tools{align-self:end!important;margin:0!important}
+#listView>.tools{display:grid!important;grid-template-columns:minmax(230px,2fr) repeat(3,minmax(118px,.8fr)) max-content!important;gap:10px!important;width:100%!important}
+.business-tools{display:grid!important;grid-template-columns:minmax(230px,1.55fr) minmax(138px,.7fr) max-content max-content max-content!important;gap:10px!important;width:100%!important}
+#listView>.tools button,.business-tools button{min-height:42px!important;padding:0 16px!important;width:auto!important}
+.business-tools #bizBatch,.business-tools #bizAddImage{min-width:116px!important}.business-tools #bizNew{min-width:148px!important}
+.creative-module-action,.type-compass{margin:0 0 16px!important}
+.business-editor-dialog{width:min(1120px,calc(100vw - 40px))!important;max-width:1120px!important;max-height:calc(100vh - 40px)!important;overflow:hidden!important}
+.business-editor-dialog .modal,.business-editor{width:100%!important;max-width:none!important;overflow:hidden!important}
+.business-editor{max-height:calc(100vh - 40px)!important;padding:0 26px 18px!important;display:flex!important;flex-direction:column!important}
+.business-editor .editor-section{display:grid!important;grid-template-columns:150px minmax(0,1fr)!important;flex:0 0 auto!important;padding:16px 0!important}
+.business-editor .editor-section .fields{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.business-editor .editor-section:last-of-type{overflow:auto!important;overscroll-behavior:contain!important}
+.business-editor .editor-section:last-of-type::-webkit-scrollbar,.business-editor-dialog::-webkit-scrollbar{width:0!important;height:0!important}
+.business-editor>.modal-foot{flex:0 0 auto!important;margin:14px 0 0!important;padding-top:14px!important;background:#fff!important}
+body{animation:ekko-workspace-in .32s cubic-bezier(.2,.75,.25,1) both}@keyframes ekko-workspace-in{from{opacity:.01;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:1180px){.creative-title-row,.business-title-row{grid-template-columns:1fr!important;gap:14px!important}.business-tools{grid-template-columns:minmax(190px,1.35fr) minmax(126px,.7fr) max-content max-content!important}#listView>.tools{grid-template-columns:minmax(200px,1.4fr) repeat(2,minmax(118px,.8fr)) max-content!important}}
+@media(max-width:760px){.creative-title-row,.business-title-row{display:block!important}.creative-title-row .tools,.business-title-row .business-tools{margin-top:16px!important}.business-tools,#listView>.tools{grid-template-columns:1fr!important}.business-editor-dialog{width:calc(100vw - 20px)!important;max-height:calc(100vh - 20px)!important}.business-editor{max-height:calc(100vh - 20px)!important;padding:0 16px 16px!important}.business-editor .editor-section{grid-template-columns:1fr!important}.business-editor .editor-section .fields{grid-template-columns:1fr!important}}
+
+/* Prevent the V1 header from flashing between login and the enhanced shell. */
+body:not(.ekko-shell-ready) .top .nav{visibility:hidden!important}
+body.ekko-shell-ready .layout{animation:ekko-shell-fade .28s ease-out both}@keyframes ekko-shell-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.creative-comments-dialog .modal{width:min(860px,calc(100vw - 48px))!important}.creative-comments-dialog .comment-compose{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:10px!important}.creative-comments-dialog .comment-compose textarea{min-height:104px!important}.creative-comments-dialog .comment-compose button{align-self:end!important}

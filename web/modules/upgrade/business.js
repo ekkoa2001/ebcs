@@ -46,13 +46,13 @@ creativeHeader.append(creativeCopy,creativeTools);listView.prepend(creativeHeade
 const creative=document.createElement('div');creative.className='business-tabs creative-switcher';creative.hidden=true;creative.innerHTML=['创意钩子','产品出场','完整脚本'].map((x,i)=>`<button class="soft ${i?'':'active'}" data-ci="${i}">${x}</button>`).join('');creativeHeader.after(creative);
 const creativeAction=document.createElement('div');creativeAction.id='creativeModuleAction';creativeAction.className='creative-module-action';creativeAction.hidden=true;creative.after(creativeAction);
 /* Keep the V1 reading order: title → module tabs → statistics → filters/actions. */
-creativeHeader.replaceWith(creativeCopy);creativeCopy.after(creative);creative.after(creativeAction);creativeAction.after(creativeTools);
+creativeHeader.after(creative);creative.after(creativeAction);
 function paintCreativeAction(i=0){const kinds=['开头创意','产品出场','完整脚本'],labels=['创意钩子','产品出场','完整脚本'],list=(typeof entries==='undefined'?[]:entries).filter(x=>x.kind===kinds[i]);creativeAction.innerHTML=`<div class="creative-count"><span>${labels[i]}总数</span><strong>${list.length}</strong></div><div class="creative-count"><span>已经筛选</span><strong>${list.filter(x=>x.selected||x.selectionStatus==='已选中').length}</strong></div><div class="creative-count"><span>已使用</span><strong>${list.filter(x=>x.usedDate).length}</strong></div>`;$('#creativeInlineAdd')?.remove();const add=document.createElement('button');add.id='creativeInlineAdd';add.className='green';add.textContent='＋ 新增'+labels[i];add.onclick=()=>$('#new')?.click();$('#listView .tools').append(add);$('#adWriteInline')?.toggleAttribute('hidden',i!==2)}
 creative.onclick=e=>{if(e.target.dataset.ci===undefined)return;$$('button',creative).forEach(b=>b.classList.toggle('active',b===e.target));let i=+e.target.dataset.ci;[legacy.hook,legacy.entry,legacy.script][i]?.click();paintCreativeAction(i);active('品牌创意')};
 
 const view=document.createElement('section');view.className='business-workspace';view.hidden=true;view.innerHTML=`<div class="business-title-row"><div class="business-title-copy"><div class="eyebrow">COLLECT · DEVELOP · CREATE</div><h1 id="bizTitle"></h1><p id="bizSub"></p></div><div class="tools business-tools"><input id="bizSearch" placeholder="搜索名称、产品、负责人或内容"><select id="bizStatus"></select><button class="soft" id="bizBatch">批量上传</button><button class="soft" id="bizAddImage">＋ 增加图片</button><button id="bizNew">＋ 新建</button></div></div><div class="business-tabs" id="bizTabs"></div><div id="bizCompass" class="type-compass"></div><div id="bizCards"></div><div class="pagination"><button class="soft" id="bizPrev">上一页</button><span id="bizPage"></span><button class="soft" id="bizNext">下一页</button></div>`;$('.wrap').append(view);
 /* Business pages follow the same vertical reading rhythm as Brand Creative. */
-const businessHeader=$('.business-title-row',view),businessCopy=$('.business-title-copy',view),businessTools=$('.business-tools',view);businessHeader.replaceWith(businessCopy);$('#bizCompass',view).after(businessTools);
+const businessHeader=$('.business-title-row',view),businessCopy=$('.business-title-copy',view),businessTools=$('.business-tools',view);
 const dialog=document.createElement('dialog');dialog.className='business-editor-dialog';dialog.innerHTML=`<div class="modal business-editor"><div class="modal-head"><div><span class="eyebrow" id="editorEyebrow"></span><h2 id="bizDialogTitle"></h2></div><button class="soft" id="bizClose">关闭</button></div><div id="bizFields"></div><div class="modal-foot"><button class="red" id="bizDelete">删除</button><button id="bizSave">保存</button></div></div>`;document.body.append(dialog);
 const confirmDialog=document.createElement('dialog');confirmDialog.className='confirm-dialog';confirmDialog.innerHTML=`<div class="modal confirm-card"><div class="confirm-icon">!</div><h2 id="confirmTitle"></h2><p id="confirmText"></p><div class="modal-foot"><button class="soft" id="confirmCancel">取消</button><button class="red" id="confirmOk">确认</button></div></div>`;document.body.append(confirmDialog);
 function ask(title,text,fn){$('#confirmTitle').textContent=title;$('#confirmText').textContent=text;confirmAction=fn;confirmDialog.showModal()}$('#confirmCancel').onclick=()=>confirmDialog.close();$('#confirmOk').onclick=async()=>{let fn=confirmAction;confirmAction=null;confirmDialog.close();if(fn)await fn()};
@@ -123,5 +123,35 @@ $('.date-presets',datePicker).onclick=e=>{let p=e.target.dataset.range;if(!p)ret
    intercepted every date field and made independent forms behave unexpectedly. */
 window.__ekkoNativeDates=true;
 $$('input[data-date-picker]').forEach(input=>{const clone=input.cloneNode(true);clone.readOnly=false;clone.removeAttribute('data-date-picker');input.replaceWith(clone)});
+
+/* The original creative cards use the legacy entry id.  Reuse the same
+   evaluation dialog contract as every new module instead of maintaining a
+   second, visually different review component. */
+window.EkkoOpenComments=async function(id){
+  let rows=await api(`/api/comments?entry=${encodeURIComponent(id)}`),d=document.createElement('dialog');
+  d.className='business-comments-dialog creative-comments-dialog';
+  const draw=()=>{d.innerHTML=`<div class="modal"><div class="modal-head"><div><h2>团队评价</h2><p class="hint">写下具体、可执行的团队评价。</p></div><button class="soft" data-close>关闭</button></div><div class="comment-list">${rows.map(c=>`<div class="comment-line"><small>${esc(c.name||c.username)} · ${esc((c.time||'').replace('T',' ').slice(0,19))}</small><p>${esc(c.content)}</p>${(c.replies||[]).map(r=>`<div class="comment-line comment-reply"><small>${esc(r.actor)} · 回复</small><p>${esc(r.content)}</p></div>`).join('')}<div class="actions"><button class="quiet-action" data-like="${c.id}">${c.liked?'取消点赞':'点赞'} ${c.likes||0}</button><button class="quiet-action" data-reply="${c.id}">回复</button>${c.username===serverUser.username||serverUser.role==='admin'?`<button class="quiet-action" data-del="${c.id}">删除</button>`:''}</div></div>`).join('')||'<p class="hint">写下第一条评价，帮助团队完善内容。</p>'}</div><form class="comment-compose" data-form><label class="field"><span>评价内容</span><textarea required maxlength="2000" placeholder="写下具体、可执行的团队评价…"></textarea></label><button>发布评价</button></form></div>`;d.querySelector('[data-close]').onclick=()=>d.close()};
+  draw();document.body.append(d);d.showModal();
+  const live=async()=>{if(!d.open||document.activeElement?.closest('.comment-compose'))return;rows=await api(`/api/comments?entry=${encodeURIComponent(id)}`);draw()};
+  document.addEventListener('ekko:comments',live);d.addEventListener('close',()=>{document.removeEventListener('ekko:comments',live);d.remove()},{once:true});
+  d.onclick=async e=>{let like=e.target.dataset.like,reply=e.target.dataset.reply,del=e.target.dataset.del;if(like){let all=await api('/api/comments/all'),c=all.find(x=>x.id===+like);await api('/api/comments/like',{id:+like,liked:!c?.liked});rows=await api(`/api/comments?entry=${encodeURIComponent(id)}`);return draw()}if(reply){let content=await textPrompt('回复评价','写下回复内容');if(content){await api(`/api/v1/comments/${reply}/replies`,{method:'POST',body:JSON.stringify({content})});rows=await api(`/api/comments?entry=${encodeURIComponent(id)}`);draw()}return}if(del)return ask('请确认','是否删除这条评价？',async()=>{await api('/api/comments/delete',{method:'POST',body:JSON.stringify({id:+del})});rows=await api(`/api/comments?entry=${encodeURIComponent(id)}`);draw()})};
+  d.querySelector('[data-form]').onsubmit=async e=>{e.preventDefault();let value=d.querySelector('textarea').value.trim();if(!value)return;await api('/api/comments',{method:'POST',body:JSON.stringify({entryId:id,content:value})});rows=await api(`/api/comments?entry=${encodeURIComponent(id)}`);draw();document.dispatchEvent(new Event('ekko:comments'));toast('评价已发布')}
+};
+
+/* Do not expose the former page while synchronous legacy data is booting. */
+requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add('ekko-shell-ready')));
+
+/* The global button now operates on the active business module only.  Capture
+   the click so the retired V1 global type dialog cannot overwrite this view. */
+async function openContextTypes(){
+  const title=$('#typesDialog h2'),help=$('#typesDialog .help'),foot=$('#addType')?.closest('.modal-foot');
+  title.textContent=mode+'类型管理';help.textContent='管理当前模块的团队自定义类型；系统预设类型保持稳定。';
+  $('#typeGroup')?.closest('.fields')?.setAttribute('hidden','');
+  foot?.removeAttribute('hidden');foot.innerHTML='<input id="businessTypeName" placeholder="输入新的类型名称"><button id="businessTypeAdd">新增类型</button>';
+  await paintBusinessTypes();$('#typesDialog').showModal();
+  $('#businessTypeAdd').onclick=async()=>{let name=$('#businessTypeName').value.trim();if(!name)return toast('请填写类型名称');await api('/api/v1/admin/content-types',{method:'POST',body:JSON.stringify({groupName:typeGroupName(),name})});configs[mode].tabs.push(name);await paintBusinessTypes();await open(mode);$('#typesDialog').showModal()};
+  $('#typesList').onclick=async e=>{let id=e.target.dataset.typeSave||e.target.dataset.typeDelete;if(!id)return;let row=e.target.closest('[data-custom-type]'),input=row?.querySelector('input'),old=input?.defaultValue;if(!input)return;if(e.target.dataset.typeDelete){if(!await window.ekkoConfirm('删除这个自定义类型？已有内容不会被删除。'))return;await api('/api/v1/admin/content-types/'+id,{method:'DELETE'});configs[mode].tabs=configs[mode].tabs.filter(x=>x!==old)}else{let name=input.value.trim();if(!name)return toast('请填写类型名称');await api('/api/v1/admin/content-types/'+id,{method:'PUT',body:JSON.stringify({name})});configs[mode].tabs=configs[mode].tabs.map(x=>x===old?name:x)}await open(mode);await paintBusinessTypes();$('#typesDialog').showModal()}
+}
+$('#manageTypes')?.addEventListener('click',e=>{if(!mode||view.hidden)return;e.preventDefault();e.stopImmediatePropagation();openContextTypes()},true);
 datePicker.remove();
 })();

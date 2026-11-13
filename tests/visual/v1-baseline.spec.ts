@@ -44,5 +44,5 @@ test("current shell keeps one stable navigation", async ({ page }) => {
   }
   await page.getByRole("button", { name: "品牌内容", exact: true }).click();
   await expect(page.locator("#bizCards")).toBeVisible();
-  await expect(page.locator(".business-workspace > .business-tools")).toBeVisible();
+  await expect(page.locator(".business-title-row .business-tools")).toBeVisible();
 });
