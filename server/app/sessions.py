@@ -1,6 +1,4 @@
 import json
-import sqlite3
-
 import server
 
 
@@ -27,25 +25,27 @@ class SessionStore(dict):
 
 
 def save_session(token, data):
-    with sqlite3.connect(server.database_file(), timeout=20) as connection:
+    with server.connect() as connection:
         connection.execute(
             "INSERT INTO sessions(token,username,csrf,created_at,active_at,payload) VALUES(?,?,?,?,?,?) "
             "ON CONFLICT(token) DO UPDATE SET username=excluded.username,csrf=excluded.csrf,created_at=excluded.created_at,active_at=excluded.active_at,payload=excluded.payload",
             (token, data.get("username", ""), data.get("csrf", ""), float(data.get("created", 0)), float(data.get("activeAt", 0)), json.dumps(data, ensure_ascii=False)),
         )
+        connection.commit()
 
 
 def delete_session(token):
-    with sqlite3.connect(server.database_file(), timeout=20) as connection:
+    with server.connect() as connection:
         connection.execute("DELETE FROM sessions WHERE token=?", (token,))
+        connection.commit()
 
 
 def load_sessions():
     records = {}
     try:
-        with sqlite3.connect(server.database_file(), timeout=20) as connection:
+        with server.connect() as connection:
             rows = connection.execute("SELECT token,payload,created_at FROM sessions").fetchall()
-    except sqlite3.OperationalError:
+    except Exception:
         return records
     now = __import__("time").time()
     for token, payload, created_at in rows:

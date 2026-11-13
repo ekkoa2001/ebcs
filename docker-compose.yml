@@ -9,6 +9,8 @@ services:
       - api
   api:
     build: .
+    ports:
+      - "8875:8875"
     environment:
       DATABASE_URL: postgresql+psycopg://ekko:ekko@postgres:5432/ekko
       REDIS_URL: redis://redis:6379/0

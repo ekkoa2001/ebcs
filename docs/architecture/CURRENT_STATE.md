@@ -1,65 +1,40 @@
 # 当前架构状态
 
-更新时间：2026-11-12
+更新时间：2026-11-13
 
 ## 结论
 
-当前项目处于“V1 界面与业务逻辑运行在 FastAPI 兼容层之上”的过渡状态，不是完整的新架构。
-
-## 当前真实运行链路
+项目采用“冻结 V1 视觉 + 渐进式新架构”的运行方式。浏览器继续使用 `web/` 中已经验收的 V1 HTML/CSS/JavaScript；业务数据、权限和文件由 FastAPI、PostgreSQL、Redis 与 MinIO 承载。部署上线工作按要求暂缓。
 
 ```text
-浏览器
-  → web/ 中的 V1 HTML、CSS、JavaScript
-  → FastAPI app.main
-  → app.legacy 兼容分发
-  → server.py / team_server.py 旧业务处理器
-  → 本地默认 SQLite + data/media
+Browser / V1 UI
+  -> Nginx (local port 80)
+  -> FastAPI /api/v1 + legacy compatibility routes
+  -> service layer / RBAC / audit / optimistic locking
+  -> PostgreSQL + Redis + MinIO
+  -> frozen SQLite is migration source only in Docker mode
 ```
 
-Docker 环境另行提供 PostgreSQL、Redis 和 MinIO，但并不代表所有业务已迁移。
+## 已完成的非上线能力
 
-## 已完成
+- 身份：登录、退出、首次改密、资料、账号启停、角色权限、会话撤销、Redis 会话、CSRF、Argon2id 自动升级。
+- 品牌创意：钩子、产品出场、完整脚本、外键关系、封面、分镜、成品、广告数据双向兼容；旧 UI 保存会同步规范化表，新 API 修改会回写旧 UI。
+- 品牌内容：五个固定分组及固定内容类型、项目字段、状态、图片轨道、批量上传、排序、审核、最终稿、原图查看。
+- 营销方案：方案、执行阶段、客户生命周期方案及九类节点。
+- 广告数据：多对象投放、素材周期、服务端指标汇总、平台/币种隔离、排行和完整等长周期比较。
+- 竞品洞察：六类洞察、素材、借鉴、复刻、验证、负责人、评价。
+- 协作：首页真实统计、个人待办、动态、通知、评价、回复、点赞、标签、负责人、截止日期。
+- 管理：账号、RBAC、结构化操作记录、标签、类型接口、规范化归档恢复与永久删除确认。
+- 图片：真实解码、25 MB 限制、SHA-256 去重、原图不改写保存、WebP 预览/缩略图、元数据、历史路径修复、孤立对象检查。
+- OpenAPI：`/api/docs` 和 `/api/openapi.json`。
 
-- V1 页面按 CSS、JavaScript 模块整理，界面保持不变。
-- FastAPI 启动入口和旧接口兼容分发。
-- Alembic 基础迁移。
-- PostgreSQL、Redis、MinIO、Nginx 的 Docker Compose 底座。
-- 会话、RBAC、审计、对象存储的部分基础能力。
-- V1 视觉基线截图和 Playwright 配置。
-- 用户、登录、密码、个人资料、团队、RBAC、会话撤销和结构化审计已迁移到独立服务。
-- 老 UI 的身份与账号管理地址已经接入新服务，页面外观和调用方式不变。
-- PostgreSQL 建表依赖排序和旧游标兼容问题已修复。
-- Docker 环境已通过完整启动验证，首页返回 200。
-- 创意钩子已迁移到规范化 `creative_hooks` 表，具备独立 API、权限、乐观锁、归档、恢复、审计和老 UI 双向兼容。
+## 数据兼容边界
 
-## 尚未完成
+- `state.entries` 暂时保留，供冻结的 V1 创意页面使用。
+- 钩子、产品出场、脚本、分镜、成品和广告数据已有双向桥接。
+- 品牌内容、营销、生命周期、竞品、待办直接使用规范化 `/api/v1`。
+- Docker 运行时主数据是 PostgreSQL；SQLite 只读挂载作为迁移源，避免双写损坏。
 
-- Vue 前端没有承载页面；当前 App.vue 为空。
-- creative、content、marketing、analytics、competitors 等新路由尚未实现业务接口。
-- V1 数据仍以旧表和旧处理器为主。
-- SQLite 到 PostgreSQL 的迁移、核对和回滚流程未完整验收。
-- 正式对象存储切换、权限、签名 URL 和全量图片迁移未完整验收。
-- README 中规划的新业务模块尚未全部实现。
-- 生产密钥、域名、HTTPS、监控、告警和自动备份尚未配置。
+## 暂缓事项
 
-## 目录职责
-
-| 目录 | 当前职责 | 处理原则 |
-| --- | --- | --- |
-| `web/` | V1 生产界面和浏览器逻辑 | 视觉冻结，渐进接新 API |
-| `server/` | FastAPI、旧处理器、迁移和后端基础设施 | 逐模块替换兼容层 |
-| `frontend/` | 尚未启用的 Vue/Vite 宿主 | 暂不作为生产入口 |
-| `data/` | 本地数据库、媒体和备份 | 不提交 Git，独立备份 |
-| `deploy/` | Nginx 与部署说明 | 补齐生产配置模板 |
-| `tests/` | 视觉回归测试 | 扩展 API、权限和端到端测试 |
-| `docs/` | 审计、架构、验收与上线文档 | 作为唯一实施记录 |
-
-## 迁移原则
-
-1. 保持 `web/` 的现有视觉与交互，不做无关重构。
-2. 新业务先实现数据库模型、服务层和 `/api/v1`，再接现有页面。
-3. 每迁移一个模块，补齐测试后再关闭对应旧处理器分支。
-4. SQLite 保留为迁移来源；生产数据以 PostgreSQL 为准。
-5. 原图进入私有对象存储；数据库只保存元数据和对象键。
-6. 未通过视觉回归、权限测试和数据核对，不得标记模块完成。
+仅以下上线工作未执行：正式域名、HTTPS 证书、生产密钥轮换、云端数据库/对象存储、监控告警、CI/CD 和正式发布。

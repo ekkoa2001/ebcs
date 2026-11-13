@@ -108,7 +108,7 @@ class Handler(base.Handler):
                 rows=c.execute('SELECT c.id,c.entry_id,c.actor,p.name,c.time,c.content FROM comments c LEFT JOIN profiles p ON c.actor=p.username ORDER BY c.id DESC').fetchall()
                 items=[]
                 for r in rows:
-                    x=dict(zip(['id','entryId','username','name','time','content'],r));x['likes']=c.execute('SELECT count(*) FROM likes WHERE comment_id=?',(r[0],)).fetchone()[0];x['liked']=bool(c.execute('SELECT 1 FROM likes WHERE comment_id=? AND actor=?',(r[0],ses['username'])).fetchone());items.append(x)
+                    x=dict(zip(['id','entryId','username','name','time','content'],r));x['likes']=c.execute('SELECT count(DISTINCT actor) FROM (SELECT actor FROM likes WHERE comment_id=? UNION ALL SELECT actor FROM comment_likes WHERE comment_id=?) q',(r[0],r[0])).fetchone()[0];x['liked']=bool(c.execute('SELECT 1 FROM (SELECT actor FROM likes WHERE comment_id=? UNION ALL SELECT actor FROM comment_likes WHERE comment_id=?) q WHERE actor=?',(r[0],r[0],ses['username'])).fetchone());replies=c.execute('SELECT id,actor,time,content FROM comment_replies WHERE comment_id=? ORDER BY id',(r[0],)).fetchall();x['replies']=[dict(zip(['id','actor','time','content'],reply)) for reply in replies];items.append(x)
                 return base.respond(self,200,items)
             if path=='/api/events':
                 rows=c.execute('SELECT e.id,e.actor,p.name,e.time,e.kind,e.entry_id,e.title,e.batch_id FROM events e LEFT JOIN profiles p ON e.actor=p.username WHERE length(e.recipient)=0 OR e.recipient=? ORDER BY e.id DESC LIMIT 100',(ses['username'],)).fetchall()
@@ -164,13 +164,14 @@ class Handler(base.Handler):
                 if not row:return base.respond(self,404,{'error':'评价已删除'})
                 if path.endswith('/delete'):
                     if ses['role']!='admin' and row[0]!=ses['username']:return base.respond(self,403,{'error':'只能删除自己的评价'})
-                    c.execute('DELETE FROM comments WHERE id=?',(data['id'],));c.execute('DELETE FROM likes WHERE comment_id=?',(data['id'],));base.log(c,ses['username'],'删除评价 '+str(data['id']))
+                    c.execute('DELETE FROM comment_replies WHERE comment_id=?',(data['id'],));c.execute('DELETE FROM comment_likes WHERE comment_id=?',(data['id'],));c.execute('DELETE FROM likes WHERE comment_id=?',(data['id'],));c.execute('DELETE FROM comments WHERE id=?',(data['id'],));base.log(c,ses['username'],'删除评价 '+str(data['id']))
                 elif data.get('liked'):
                     inserted=c.execute('INSERT OR IGNORE INTO likes VALUES(?,?)',(data['id'],ses['username'])).rowcount
+                    c.execute('INSERT OR IGNORE INTO comment_likes(comment_id,actor) VALUES(?,?)',(data['id'],ses['username']))
                     if inserted and row[0]!=ses['username']:
                         info=c.execute('SELECT entry_id,content FROM comments WHERE id=?',(data['id'],)).fetchone()
                         c.execute('INSERT INTO events(actor,time,kind,entry_id,title,batch_id,recipient) VALUES(?,?,?,?,?,?,?)',(ses['username'],now(),'点赞',info[0],info[1][:100],secrets.token_hex(12),row[0]))
-                else:c.execute('DELETE FROM likes WHERE comment_id=? AND actor=?',(data['id'],ses['username']))
+                else:c.execute('DELETE FROM likes WHERE comment_id=? AND actor=?',(data['id'],ses['username']));c.execute('DELETE FROM comment_likes WHERE comment_id=? AND actor=?',(data['id'],ses['username']))
                 c.commit();return base.respond(self,200,{'ok':True})
             if path=='/api/profile':
                 if set(data)-{'name','avatar'}:return base.respond(self,403,{'error':'团队、岗位和加入日期只能由管理员设置或系统记录'})
@@ -276,7 +277,11 @@ class Handler(base.Handler):
                 c.execute('INSERT INTO revisions(actor,time,entry_id,before_json,after_json) VALUES(?,?,?,?,?)',(ses['username'],now(),id,json.dumps(old[id],ensure_ascii=False),'null'));base.log(c,ses['username'],'删除 '+old[id]['title'])
             c.execute('UPDATE state SET version=?,entries=? WHERE id=1',(version+1,json.dumps(list(new.values()),ensure_ascii=False)));c.commit()
         from app.services.creative_hooks import synchronize_from_entries
+        from app.services.product_entries import synchronize_from_entries as synchronize_product_entries
+        from app.services.scripts import synchronize_from_entries as synchronize_scripts
         synchronize_from_entries(list(new.values()),ses['username'])
+        synchronize_product_entries(list(new.values()),ses['username'])
+        synchronize_scripts(list(new.values()),ses['username'])
         return base.respond(self,200,{'version':version+1,'entries':list(new.values())})
 
 base.Handler=Handler

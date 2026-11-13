@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.legacy import dispatch
-from app.routers import admin, analytics, auth, comments, competitors, content, creative, marketing, media, notifications, users
+from app.routers import admin, analytics, auth, comments, competitors, content, creative, dashboard, marketing, media, notifications, users
 
 
 def upgrade_database():
@@ -58,10 +58,11 @@ async def lifespan(_app: FastAPI):
     seed()
     install_sessions()
     from app.redis_sessions import attach
-    from app.object_store import ensure_bucket
+    from app.object_store import ensure_bucket, repair_legacy_media_paths
     attach()
     try:
         ensure_bucket()
+        repair_legacy_media_paths()
     except Exception:
         pass
     if settings["database_url"].startswith("postgres"):
@@ -71,8 +72,13 @@ async def lifespan(_app: FastAPI):
         if count == 0:
             from app.import_postgres import copy_database
             copy_database(settings["database_path"])
+            repair_legacy_media_paths()
     from app.services.creative_hooks import synchronize_from_legacy_state
     synchronize_from_legacy_state()
+    from app.services.product_entries import synchronize_from_legacy_state as synchronize_product_entries
+    synchronize_product_entries()
+    from app.services.scripts import synchronize_from_legacy_state as synchronize_scripts
+    synchronize_scripts()
     try:
         backup_database()
     except Exception:
@@ -80,8 +86,8 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Ekko Script Web", version="2", docs_url=None, redoc_url=None, lifespan=lifespan)
-for item in (auth.router, auth.compat_router, users.router, users.compat_router, admin.router, admin.compat_router, creative.router, content.router, marketing.router, analytics.router, competitors.router, comments.router, notifications.router, media.router):
+app = FastAPI(title="Ekko Brand Content Strategy", version="2.0", docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json", lifespan=lifespan)
+for item in (auth.router, auth.compat_router, users.router, users.compat_router, admin.router, admin.compat_router, creative.router, content.router, marketing.router, analytics.router, competitors.router, comments.router, notifications.router, media.router, dashboard.router):
     app.include_router(item)
 
 
