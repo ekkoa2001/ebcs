@@ -117,6 +117,19 @@ def delete_content_type(identifier:str,request:Request):
     return {"ok":True}
 
 
+@router.put("/content-types/{identifier}")
+def update_content_type(identifier:str,request:Request,body:dict):
+    current=require_session(request); require_csrf(request,current); require_permission(current,"admin.access")
+    name=str(body.get("name") or "").strip(); description=str(body.get("description") or "").strip()
+    if not name: raise HTTPException(400,"请填写类型名称")
+    now=datetime.now(timezone.utc).isoformat()
+    with SessionLocal() as db:
+        row=db.execute(text("SELECT origin FROM content_types WHERE id=:id"),{"id":identifier}).first()
+        if not row: raise HTTPException(404,"类型不存在")
+        db.execute(text("UPDATE content_types SET name=:name,description=:description,updated_at=:now WHERE id=:id"),{"id":identifier,"name":name,"description":description,"now":now}); db.commit()
+    return {"id":identifier,"name":name,"description":description}
+
+
 @router.get("/archives")
 def archives(request:Request,page:int=Query(1,ge=1),page_size:int=Query(50,alias="pageSize",ge=1,le=200)):
     current=require_session(request); require_permission(current,"content.restore")
