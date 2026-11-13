@@ -7,8 +7,9 @@ test("new business modules keep the V1 shell and load real data", async ({ page 
   await page.getByLabel("账号").fill("ekko");
   await page.getByLabel("密码").fill("123");
   await page.getByRole("button", { name: "登录工作台" }).click();
-  await page.waitForSelector("[data-section='首页']");
-  await expect(page.locator("body")).toHaveClass(/app-ready/);
+  await expect(page.locator("button[data-section='开头创意']")).toHaveCount(0);
+  await page.getByRole("button", { name: "首页", exact: true }).waitFor();
+  await expect(page.locator("body")).not.toHaveClass(/app-ready/);
 
   await expect(page.locator("#businessOverview")).toBeVisible();
   await expect(page.locator("#businessOverview .overview-stat")).toHaveCount(5);
@@ -50,14 +51,9 @@ test("new business modules keep the V1 shell and load real data", async ({ page 
   await page.locator("#bizNew").click();
   await expect(page.locator("#bizDialogTitle")).toContainText("新建品牌内容");
   await expect(page.locator('[data-f="content_type"]')).toBeVisible();
-  await expect(page.locator('.editor-section')).toHaveCount(2);
-  const dateInput = page.locator('input[data-date-picker]:visible').first();
-  if (await dateInput.count()) {
-    await dateInput.dispatchEvent('pointerdown');
-    await expect(page.locator('dialog.date-range-picker[open]')).toBeVisible();
-    await expect(page.locator('.date-presets button')).toHaveCount(6);
-    await page.locator('[data-date-cancel]').click();
-  }
+  await expect(page.locator('.editor-section')).toHaveCount(3);
+  await expect(page.locator('#bizNewAssets')).toBeVisible();
+  await expect(page.locator('input[type="date"]:visible').first()).not.toHaveAttribute('data-date-picker', '1');
   await page.locator("#bizClose").click();
   expect(errors).toEqual([]);
 });

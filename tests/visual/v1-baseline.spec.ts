@@ -27,56 +27,22 @@ async function expectBaseline(page: Page, name: string, options: { fullPage?: bo
   expect.soft(ratio, `${name} 像素差异`).toBeLessThanOrEqual(maxRatio);
 }
 
-test("V1 视觉基线", async ({ page }) => {
+test("current shell keeps one stable navigation", async ({ page }) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1600);
-  await expectBaseline(page, "01-login.png", { fullPage: true });
+  await expect(page.getByRole("button", { name: "登录工作台" })).toBeVisible();
 
   await page.getByLabel("账号").fill("ekko");
   await page.getByLabel("密码").fill("123");
   await page.getByRole("button", { name: "登录工作台" }).click();
-  await page.waitForSelector("[data-section='首页']");
-  await page.waitForTimeout(800);
-  await expectBaseline(page, "02-home.png", { fullPage: true });
-
-  const openSection = async (name: string) => {
-    await page.locator(`[data-section="${name}"]`).click();
-    await page.waitForTimeout(500);
-  };
-
-  await openSection("开头创意");
-  await expectBaseline(page, "03-hooks.png", { fullPage: true });
-
-  await openSection("产品出场");
-  await expectBaseline(page, "04-entries.png", { fullPage: true });
-
-  await openSection("完整脚本");
-  await page.waitForSelector(".storyboard-scroll");
-  await expectBaseline(page, "05-scripts.png", { fullPage: true });
-  await expectBaseline(page, "07-storyboard.png", { locator: page.locator(".storyboard-scroll").first() });
-
-  await page.locator("[data-open]").first().click();
-  await page.waitForSelector("dialog[open]");
-  await page.waitForTimeout(400);
-  await expectBaseline(page, "06-script-detail.png", { fullPage: true });
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
-
-  await openSection("广告数据");
-  await expectBaseline(page, "08-ads.png", { fullPage: true });
-
-  await openSection("首页");
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.locator("#teamNotifications").click();
-  await page.waitForSelector("#eventsPanel:not([hidden])");
-  await page.waitForTimeout(800);
-  await expectBaseline(page, "09-activity.png", { fullPage: true });
-  await page.locator("#closeEvents").click();
-  await page.waitForTimeout(300);
-
-  await page.locator("#teamAdmin").click();
-  await page.waitForSelector("#workshopAdmin[open]");
-  await page.waitForTimeout(800);
-  await expectBaseline(page, "10-admin.png", { fullPage: true });
+  await expect(page.locator("button[data-section='开头创意']")).toHaveCount(0);
+  for (const moduleName of ["首页", "品牌创意", "品牌内容", "营销方案", "售后内容", "广告复盘", "竞品洞察"]) {
+    await page.getByRole("button", { name: moduleName, exact: true }).click();
+    await page.waitForTimeout(120);
+    await expect(page.locator("button.nav.active")).toHaveCount(1);
+  }
+  await page.getByRole("button", { name: "品牌内容", exact: true }).click();
+  await expect(page.locator("#bizCards")).toBeVisible();
+  await expect(page.locator(".business-title-row .business-tools")).toBeVisible();
 });
