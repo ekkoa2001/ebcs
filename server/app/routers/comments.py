@@ -1,10 +1,34 @@
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
+import asyncio
+import json
 from app.database import SessionLocal
 from app.dependencies import require_csrf, require_permission, require_session
 from app.services import audit, resources
 
 router = APIRouter(prefix="/api/v1", tags=["comments"])
+
+
+@router.get("/comments/stream")
+def comment_stream(request: Request):
+    require_session(request)
+    async def events():
+        last = None
+        while True:
+            if await request.is_disconnected(): break
+            with SessionLocal() as db:
+                row = db.execute(text("SELECT COALESCE(MAX(id),0),COUNT(*) FROM comments")).first()
+                replies = db.execute(text("SELECT COALESCE(MAX(id),0),COUNT(*) FROM comment_replies")).first()
+                likes = db.execute(text("SELECT COUNT(*) FROM comment_likes")).scalar_one()
+                version = f"{row[0]}:{row[1]}:{replies[0]}:{replies[1]}:{likes}"
+            if version != last:
+                last = version
+                yield "data: " + json.dumps({"version": version}) + "\n\n"
+            else:
+                yield ": keepalive\n\n"
+            await asyncio.sleep(1)
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
 
 
 @router.get("/comments/{entity_type}/{entity_id}")
