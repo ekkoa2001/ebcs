@@ -15,6 +15,7 @@ frontend/.gitignore
 tests/visual/node_modules/
 tests/visual/test-results/
 tests/visual/playwright-report/
+/test-results/
 data/backups/
 data/media/
 *.sqlite3-shm
