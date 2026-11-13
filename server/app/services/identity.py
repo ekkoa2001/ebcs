@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 
 from argon2 import PasswordHasher
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 import server
@@ -154,6 +154,25 @@ def update_user(actor: str, username: str, role: str, active: bool, password: st
             user.salt = b""
             user.password_hash = hasher.hash(password).encode("utf-8")
             profile.must_change = 1
+        db.commit()
+    revoke_sessions(username)
+
+
+def delete_user(actor: str, username: str) -> None:
+    if actor.casefold() == username.casefold():
+        raise IdentityError(400, "不能删除当前登录的管理员")
+    with SessionLocal() as db:
+        user = db.get(User, username)
+        if user is None:
+            raise IdentityError(404, "账号不存在")
+        active_admins = db.scalar(select(func.count()).select_from(User).where(User.role == "admin", User.active == 1)) or 0
+        if user.role == "admin" and user.active and active_admins <= 1:
+            raise IdentityError(400, "至少保留一个启用的管理员")
+        profile = db.get(Profile, username)
+        if profile is not None:
+            db.delete(profile)
+        db.execute(text("DELETE FROM user_profiles WHERE username=:username"), {"username": username})
+        db.delete(user)
         db.commit()
     revoke_sessions(username)
 

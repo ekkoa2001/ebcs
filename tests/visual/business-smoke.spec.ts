@@ -11,6 +11,8 @@ test("new business modules keep the V1 shell and load real data", async ({ page 
 
   await expect(page.locator("#businessOverview")).toBeVisible();
   await expect(page.locator("#businessOverview .overview-stat")).toHaveCount(5);
+  await expect(page.locator("#backup")).toBeHidden();
+  await expect(page.locator("#restore")).toBeHidden();
   const media = await page.request.get("/api/v1/media");
   expect(media.ok()).toBeTruthy();
   const mediaRows = await media.json();
@@ -32,6 +34,8 @@ test("new business modules keep the V1 shell and load real data", async ({ page 
   }
 
   await page.getByRole("button", { name: /品牌内容/ }).click();
+  await expect(page.locator("#bizCompass")).toBeVisible();
+  await expect(page.locator("#bizStatus")).toBeHidden();
   await page.locator("#bizNew").click();
   await expect(page.locator("#bizDialogTitle")).toContainText("新建品牌内容");
   await expect(page.locator('[data-f="content_type"]')).toBeVisible();

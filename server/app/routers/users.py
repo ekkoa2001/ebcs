@@ -51,6 +51,16 @@ def update_impl(request: Request, body: UserUpdateInput):
     return {"ok": True}
 
 
+def delete_impl(request: Request, username: str):
+    current = writer(request)
+    try:
+        identity.delete_user(current["username"], username)
+    except identity.IdentityError as error:
+        fail(error)
+    audit.record(current["username"], f"删除账号 {username}", request, object_type="user", object_id=username)
+    return {"ok": True}
+
+
 def team_impl(request: Request, body: TeamUpdateInput):
     current = require_session(request)
     require_csrf(request, current)
@@ -91,6 +101,11 @@ def update_user(username: str, request: Request, body: UserUpdateInput):
     return update_impl(request, body)
 
 
+@router.delete("/{username}")
+def delete_user(username: str, request: Request):
+    return delete_impl(request, username)
+
+
 @router.patch("/me/profile")
 def update_own_profile(request: Request, body: ProfileUpdateInput):
     return profile_impl(request, body)
@@ -114,6 +129,11 @@ def compatibility_create_user(request: Request, body: UserCreateInput):
 @compat_router.post("/api/users/update")
 def compatibility_update_user(request: Request, body: UserUpdateInput):
     return update_impl(request, body)
+
+
+@compat_router.post("/api/users/delete")
+def compatibility_delete_user(request: Request, body: dict):
+    return delete_impl(request, str(body.get("username") or ""))
 
 
 @compat_router.post("/api/team/update")
