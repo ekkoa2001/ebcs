@@ -10,6 +10,27 @@ from app.services import resources
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
+# These are product defaults, not hard-coded front-end-only labels.  Keeping
+# them in the database lets the type manager rename or remove every type.
+DEFAULT_CONTENT_TYPES = {
+    "brand_content": ["品牌推广图", "品牌 UGC 图", "新品发布图", "产品详情图", "产品卖点图", "产品场景图", "EDM 营销图", "折扣营销图", "节日／大促图", "独立站 Banner", "SEO 文章配图"],
+    "after_sales": ["使用教程方案", "产品保养方案", "常见问题方案", "故障排查方案", "配件说明方案", "售后流程方案", "客户关怀方案"],
+    "marketing_plan": ["草稿", "待执行", "执行中", "已结束", "已复盘"],
+    "competitor_insight": ["竞品产品内容", "竞品独立站", "竞品营销策略", "竞品广告素材", "竞品 EDM", "竞品 SEO Blog"],
+}
+
+
+def ensure_default_content_types(db):
+    """Seed a group only once so a user may later delete every type if needed."""
+    now = datetime.now(timezone.utc).isoformat()
+    for group, names in DEFAULT_CONTENT_TYPES.items():
+        exists = db.execute(text("SELECT 1 FROM content_types WHERE group_name=:group LIMIT 1"), {"group": group}).first()
+        if exists:
+            continue
+        for index, name in enumerate(names, start=1):
+            db.execute(text("INSERT INTO content_types(id,group_name,code,name,origin,description,created_at,updated_at) VALUES(:id,:group,:code,:name,:origin,'',:now,:now)"), {"id": f"system_{group}_{index}", "group": group, "code": str(index), "name": name, "origin": "system", "now": now})
+    db.commit()
+
 
 @router.get("/activity-logs")
 def activity_logs(request: Request, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200), actor: str = "", module: str = ""):
@@ -92,7 +113,9 @@ def set_entity_tags(entity_type:str,entity_id:str,request:Request,body:dict):
 @router.get("/content-types")
 def content_types(request:Request):
     current=require_session(request); require_permission(current,"content.read")
-    with SessionLocal() as db: return [dict(x._mapping) for x in db.execute(text("SELECT * FROM content_types ORDER BY group_name,name")).all()]
+    with SessionLocal() as db:
+        ensure_default_content_types(db)
+        return [dict(x._mapping) for x in db.execute(text("SELECT * FROM content_types ORDER BY group_name,code,name")).all()]
 
 
 @router.post("/content-types")
@@ -112,7 +135,6 @@ def delete_content_type(identifier:str,request:Request):
     with SessionLocal() as db:
         row=db.execute(text("SELECT origin FROM content_types WHERE id=:id"),{"id":identifier}).first()
         if not row: raise HTTPException(404,"类型不存在")
-        if row.origin!="custom": raise HTTPException(400,"系统类型不能删除")
         db.execute(text("DELETE FROM content_types WHERE id=:id"),{"id":identifier}); db.commit()
     return {"ok":True}
 
@@ -124,9 +146,18 @@ def update_content_type(identifier:str,request:Request,body:dict):
     if not name: raise HTTPException(400,"请填写类型名称")
     now=datetime.now(timezone.utc).isoformat()
     with SessionLocal() as db:
-        row=db.execute(text("SELECT origin FROM content_types WHERE id=:id"),{"id":identifier}).first()
+        row=db.execute(text("SELECT group_name,name FROM content_types WHERE id=:id"),{"id":identifier}).first()
         if not row: raise HTTPException(404,"类型不存在")
+        group_name, previous_name = row
         db.execute(text("UPDATE content_types SET name=:name,description=:description,updated_at=:now WHERE id=:id"),{"id":identifier,"name":name,"description":description,"now":now}); db.commit()
+        # Keep existing records connected when a visible type is renamed.
+        if group_name in ("brand_content", "after_sales"):
+            db.execute(text("UPDATE brand_content_projects SET content_type=:name WHERE content_type=:old"), {"name": name, "old": previous_name})
+        elif group_name == "marketing_plan":
+            db.execute(text("UPDATE marketing_plans SET status=:name WHERE status=:old"), {"name": name, "old": previous_name})
+        elif group_name == "competitor_insight":
+            db.execute(text("UPDATE competitor_insights SET insight_type=:name WHERE insight_type=:old"), {"name": name, "old": previous_name})
+        db.commit()
     return {"id":identifier,"name":name,"description":description}
 
 

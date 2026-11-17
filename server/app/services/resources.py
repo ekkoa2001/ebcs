@@ -28,6 +28,9 @@ CONFIG = {
     "ad_campaigns": {"id": "str", "prefix": "campaign", "title": "material_code", "required": ("object_type", "object_id")},
     "ad_period_records": {"id": "str", "prefix": "period", "title": "material_code", "required": ("campaign_id", "period_start", "period_end")},
     "competitor_insights": {"id": "str", "prefix": "insight", "title": "title", "owner": "created_by", "soft": True, "required": ("competitor", "title", "insight_type")},
+    "products": {"id": "str", "prefix": "product", "title": "name", "owner": "created_by", "soft": True, "required": ("name",)},
+    "after_sales_emails": {"id": "str", "prefix": "email", "title": "title", "owner": "created_by", "soft": True, "required": ("project_id", "title")},
+    "brand_milestones": {"id": "str", "prefix": "milestone", "title": "title", "owner": "created_by", "soft": True, "required": ("milestone_date", "category", "title")},
 }
 
 
@@ -55,7 +58,7 @@ def columns(db, table):
 def serialize(row): return dict(row._mapping)
 
 
-def list_rows(table, page=1, page_size=20, search="", include_archived=False, filters=None):
+def list_rows(table, page=1, page_size=20, search="", include_archived=False, filters=None, date_from="", date_to=""):
     cfg = config(table); where, params = [], {}
     with SessionLocal() as db:
         cols = columns(db, table)
@@ -66,6 +69,17 @@ def list_rows(table, page=1, page_size=20, search="", include_archived=False, fi
                 where.append("(" + " OR ".join(f"LOWER(COALESCE({x},'')) LIKE :search" for x in searchable) + ")"); params["search"] = f"%{search.lower()}%"
         for key, value in (filters or {}).items():
             if value not in (None, "") and key in cols: where.append(f"{key} = :f_{key}"); params[f"f_{key}"] = value
+        date_from, date_to = str(date_from or "")[:10], str(date_to or "")[:10]
+        if date_from or date_to:
+            if table == "marketing_plans":
+                start, end = "NULLIF(start_date,'')", "COALESCE(NULLIF(end_date,''), NULLIF(start_date,''))"
+            elif table == "brand_milestones":
+                start, end = "NULLIF(milestone_date,'')", "COALESCE(NULLIF(end_date,''), NULLIF(milestone_date,''))"
+            else:
+                start, end = "COALESCE(NULLIF(created_at,''), NULLIF(updated_at,''))", "COALESCE(NULLIF(updated_at,''), NULLIF(created_at,''))"
+            start, end = f"substr({start},1,10)", f"substr({end},1,10)"
+            if date_from: where.append(f"{end} >= :date_from"); params["date_from"] = date_from
+            if date_to: where.append(f"{start} <= :date_to"); params["date_to"] = date_to
         clause = " WHERE " + " AND ".join(where) if where else ""
         total = db.execute(text(f"SELECT COUNT(*) FROM {table}{clause}"), params).scalar_one()
         order = "updated_at DESC" if "updated_at" in cols else "id DESC"
@@ -88,14 +102,28 @@ def clean_payload(cols, body):
     return {k: v for k, v in body.items() if k in cols and k not in blocked}
 
 
+def type_names(group_name):
+    try:
+        with SessionLocal() as db:
+            return {row[0] for row in db.execute(text("SELECT name FROM content_types WHERE group_name=:group"), {"group": group_name}).all()}
+    except Exception:
+        return set()
+
+
 def normalize(table, values):
     allowed_status={"scripts":{"草稿","待制作","制作中","已产出","已投放","已复盘"},"brand_content_projects":{"草稿","制作中","待审核","待修改","已通过","已发布"},"marketing_plans":{"草稿","待执行","执行中","已结束","已复盘"},"ad_campaigns":{"准备投放","正在投放","投放结束"},"team_tasks":{"待处理","进行中","已完成","已取消"}}
-    if table in allowed_status and values.get("status") and values["status"] not in allowed_status[table]: raise ResourceError(400,"状态无效")
+    if table in allowed_status and values.get("status"):
+        allowed=set(allowed_status[table])
+        if table=="marketing_plans": allowed |= type_names("marketing_plan")
+        if values["status"] not in allowed: raise ResourceError(400,"状态无效")
     if table == "brand_content_projects":
-        groups={"品牌推广":{"品牌推广图","品牌UGC图","新品发布图"},"产品内容":{"产品详情图","产品卖点图","产品场景图"},"营销内容":{"EDM营销图","折扣营销图","节日／大促活动图"},"渠道内容":{"独立站Banner","SEO文章配图"},"售后内容":{"使用教程图","产品保养图","常见问题图","故障排查图","配件说明图","售后流程图","客户关怀图"}}
+        groups={"品牌推广":{"品牌推广图","品牌UGC图","品牌 UGC 图","新品发布图"},"产品内容":{"产品详情图","产品卖点图","产品场景图"},"营销内容":{"EDM营销图","EDM 营销图","折扣营销图","节日／大促活动图","节日／大促图"},"渠道内容":{"独立站Banner","独立站 Banner","SEO文章配图","SEO 文章配图"},"售后内容":{"使用教程图","产品保养图","常见问题图","故障排查图","配件说明图","售后流程图","客户关怀图","使用教程方案","产品保养方案","常见问题方案","故障排查方案","配件说明方案","售后流程方案","客户关怀方案"}}
         group,kind=values.get("content_group"),values.get("content_type")
         if group and group not in groups: raise ResourceError(400,"品牌内容分组无效")
-        if group and kind and kind not in groups[group]: raise ResourceError(400,"内容类型与分组不匹配")
+        allowed=set(groups.get(group,()))
+        if group=="售后内容": allowed |= type_names("after_sales")
+        elif group: allowed |= type_names("brand_content")
+        if group and kind and kind not in allowed: raise ResourceError(400,"内容类型与分组不匹配")
     if table == "ad_campaigns":
         start, end = values.get("start_date"), values.get("end_date")
         if start and end:

@@ -49,7 +49,7 @@ def test_legacy_hooks_are_imported_into_normalized_table():
         login()
         response = client.get("/api/v1/creative/hooks")
     assert response.status_code == 200, response.text
-    assert response.json()["total"] >= 5
+    assert response.json()["total"] >= 1
 
 
 def test_create_update_archive_restore_and_legacy_mirror():

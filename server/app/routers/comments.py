@@ -31,6 +31,33 @@ def comment_stream(request: Request):
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
 
 
+@router.get("/comment-previews")
+def comment_previews(request: Request, ids: str = ""):
+    current = require_session(request)
+    require_permission(current, "content.read")
+    wanted = [part.strip() for part in ids.split(",") if part.strip()][:80]
+    if not wanted:
+        return {}
+    params = {f"a{index}": value for index, value in enumerate(wanted)}
+    params.update({f"b{index}": value for index, value in enumerate(wanted)})
+    left = ",".join(f":a{index}" for index in range(len(wanted)))
+    right = ",".join(f":b{index}" for index in range(len(wanted)))
+    with SessionLocal() as db:
+        rows = db.execute(text(
+            f"""SELECT c.id, c.actor, c.time, c.content, c.entity_id, c.entry_id,
+                       (SELECT COUNT(*) FROM comment_likes l WHERE l.comment_id=c.id) AS likes
+                FROM comments c
+                WHERE c.entity_id IN ({left}) OR c.entry_id IN ({right})
+                ORDER BY c.id DESC"""
+        ), params).mappings().all()
+    grouped = {value: [] for value in wanted}
+    for row in rows:
+        key = row["entity_id"] if row["entity_id"] in grouped else row["entry_id"]
+        if key in grouped:
+            grouped[key].append({"id": row["id"], "actor": row["actor"], "time": row["time"], "content": row["content"], "likes": int(row["likes"] or 0)})
+    return grouped
+
+
 @router.get("/comments/{entity_type}/{entity_id}")
 def list_comments(entity_type: str, entity_id: str, request: Request):
     current = require_session(request); require_permission(current, "content.read")

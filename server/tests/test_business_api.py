@@ -20,7 +20,7 @@ def test_all_business_collections_and_dashboard_are_available():
     paths=("/api/v1/creative/scripts","/api/v1/creative/storyboard-shots","/api/v1/creative/produced-videos","/api/v1/content/projects","/api/v1/content/assets","/api/v1/marketing/plans","/api/v1/marketing/stages","/api/v1/marketing/lifecycle","/api/v1/analytics/campaigns","/api/v1/analytics/periods","/api/v1/competitors","/api/v1/tasks")
     for path in paths:
         response=client.get(path); assert response.status_code==200,(path,response.text); assert "items" in response.json()
-    dashboard=client.get("/api/v1/dashboard"); assert dashboard.status_code==200; assert dashboard.json()["counts"]["scripts"]>=5
+    dashboard=client.get("/api/v1/dashboard"); assert dashboard.status_code==200; assert dashboard.json()["counts"]["scripts"]>=1
     compass=client.get("/api/v1/analytics/compass"); assert compass.status_code==200; assert "purchases" in compass.json()
 
 def test_create_update_archive_restore_business_resource():

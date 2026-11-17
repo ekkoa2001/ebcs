@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Request
 
@@ -19,7 +19,7 @@ def record(
     with SessionLocal() as db:
         db.add(
             ActivityLog(
-                time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                time=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                 actor=actor[:100],
                 module=module[:40],
                 action=action[:300],

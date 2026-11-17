@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.legacy import dispatch
-from app.routers import admin, analytics, auth, comments, competitors, content, creative, dashboard, marketing, media, notifications, users
+from app.routers import admin, analytics, auth, brand, comments, competitors, content, creative, dashboard, marketing, media, notifications, users
 
 
 def upgrade_database():
@@ -79,6 +79,8 @@ async def lifespan(_app: FastAPI):
     synchronize_product_entries()
     from app.services.scripts import synchronize_from_legacy_state as synchronize_scripts
     synchronize_scripts()
+    from app.services.activity_backfill import backfill_creative_activity
+    backfill_creative_activity()
     try:
         backup_database()
     except Exception:
@@ -87,7 +89,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Ekko Brand Content Strategy", version="2.0", docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json", lifespan=lifespan)
-for item in (auth.router, auth.compat_router, users.router, users.compat_router, admin.router, admin.compat_router, creative.router, content.router, marketing.router, analytics.router, competitors.router, comments.router, notifications.router, media.router, dashboard.router):
+for item in (auth.router, auth.compat_router, users.router, users.compat_router, admin.router, admin.compat_router, creative.router, content.router, marketing.router, analytics.router, competitors.router, brand.router, comments.router, notifications.router, media.router, dashboard.router):
     app.include_router(item)
 
 

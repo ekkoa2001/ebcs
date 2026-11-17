@@ -26,6 +26,10 @@ def valid_username(value: str) -> bool:
     return 1 <= len(value) <= 64 and all(char.isalnum() or char in "._-@" for char in value)
 
 
+def valid_password(value: str) -> bool:
+    return isinstance(value, str) and 1 <= len(value) <= 200 and value.isascii() and value.isalnum()
+
+
 def profile_dict(profile: Profile) -> dict:
     return {
         "name": profile.name,
@@ -99,6 +103,7 @@ def list_users() -> list[dict]:
                     "role": user.role,
                     "active": bool(user.active),
                     "name": profile.name,
+                    "avatar": profile.avatar,
                     "team": profile.team,
                     "tag": profile.tag,
                     "joined": profile.joined,
@@ -109,8 +114,10 @@ def list_users() -> list[dict]:
 
 
 def create_user(username: str, password: str, role: str) -> None:
-    if not valid_username(username) or role not in ROLES or len(password) < 12:
-        raise IdentityError(400, "账号、密码或权限不符合要求")
+    if not valid_username(username) or role not in ROLES:
+        raise IdentityError(400, "账号或权限不符合要求")
+    if not valid_password(password):
+        raise IdentityError(400, "密码只能使用数字和字母")
     with SessionLocal() as db:
         try:
             db.add(User(username=username, salt=b"", password_hash=hasher.hash(password).encode("utf-8"), role=role, active=1))
@@ -136,8 +143,8 @@ def create_user(username: str, password: str, role: str) -> None:
 def update_user(actor: str, username: str, role: str, active: bool, password: str = "") -> None:
     if not valid_username(username) or role not in ROLES:
         raise IdentityError(400, "账号或权限无效")
-    if password and len(password) < 12:
-        raise IdentityError(400, "密码至少 12 个字符")
+    if password and not valid_password(password):
+        raise IdentityError(400, "密码只能使用数字和字母")
     with SessionLocal() as db:
         user = db.get(User, username)
         if user is None:
@@ -215,8 +222,10 @@ def update_profile(username: str, name: str, avatar: str) -> dict:
 
 
 def change_password(username: str, current: str, password: str) -> None:
-    if len(password) < 12 or password == current:
-        raise IdentityError(400, "请设置至少 12 个字符且与原密码不同的新密码")
+    if password == current:
+        raise IdentityError(400, "新密码不能与当前密码相同")
+    if not valid_password(password):
+        raise IdentityError(400, "密码只能使用数字和字母")
     with SessionLocal() as db:
         user = db.get(User, username)
         if user is None or not user.active or not server.password_matches(current, user.salt, user.password_hash):

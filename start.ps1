@@ -6,7 +6,7 @@ $url = "http://127.0.0.1:$port/"
 $running = $false
 try {
     $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
-    $running = $response.Content -match 'Ekko Script Web'
+    $running = $response.Content -match 'Ekko Brand Content Strategy'
 } catch {}
 if (-not $running) {
     $bundledPython = Join-Path $env:USERPROFILE '.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
@@ -27,7 +27,7 @@ if (-not $running) {
     $process.Id | Set-Content -LiteralPath (Join-Path $logDir 'server.pid')
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         Start-Sleep -Milliseconds 250
-        try { $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1; if ($response.Content -match 'Ekko Script Web') { $running = $true; break } } catch {}
+        try { $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1; if ($response.Content -match 'Ekko Brand Content Strategy') { $running = $true; break } } catch {}
         if ($process.HasExited) { break }
     }
     if (-not $running) { throw '启动失败，请查看 logs\server-error.log。' }

@@ -22,7 +22,11 @@ def translate(sql):
         text = re.sub(r"INSERT OR IGNORE", "INSERT", text, count=1, flags=re.I) + " ON CONFLICT DO NOTHING"
     elif folded.startswith("INSERT OR REPLACE INTO ARCHIVE"):
         text = re.sub(r"INSERT OR REPLACE", "INSERT", text, count=1, flags=re.I)
-        text += " ON CONFLICT (entry_id) DO UPDATE SET name = EXCLUDED.name, data = EXCLUDED.data, updated_at = EXCLUDED.updated_at"
+        # The legacy archive table is ``(entry_id, content, actor, time)``.
+        # Its SQLite ``INSERT OR REPLACE`` form was translated with column
+        # names from a different archive schema, causing every legacy delete
+        # to fail after the state update had begun.
+        text += " ON CONFLICT (entry_id) DO UPDATE SET content = EXCLUDED.content, actor = EXCLUDED.actor, time = EXCLUDED.time"
     text = text.replace("?", "%s")
     return text, None
 

@@ -35,6 +35,21 @@ def test_legacy_login_keeps_cookie_session_and_csrf():
     assert client.get("/api/state").status_code == 401
 
 
+def test_workspace_bootstrap_keeps_session_profile_and_state_together():
+    session = login()
+    response = client.get("/api/bootstrap")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["session"]["username"] == session["username"]
+    assert payload["session"]["profile"]["name"] == session["profile"]["name"]
+    assert isinstance(payload["state"]["version"], int)
+    assert isinstance(payload["state"]["entries"], list)
+    version = client.get("/api/state/version")
+    assert version.status_code == 200, version.text
+    assert version.json()["version"] == payload["state"]["version"]
+    client.post("/api/logout", json={}, headers={**ORIGIN, "X-CSRF-Token": session["csrf"]})
+
+
 def test_new_auth_session_and_audit_are_available():
     body = login()
     current = client.get("/api/v1/auth/session")
@@ -51,7 +66,7 @@ def test_viewer_cannot_change_state_or_read_audit():
     username = "testviewer_" + uuid4().hex[:10]
     created = client.post(
         "/api/users/create",
-        json={"username": username, "role": "viewer", "password": "phase2-viewer", "active": True},
+        json={"username": username, "role": "viewer", "password": "phase2viewer", "active": True},
         headers={**ORIGIN, "X-CSRF-Token": admin["csrf"]},
     )
     assert created.status_code == 200, created.text
@@ -71,16 +86,25 @@ def test_pages_still_render_for_anonymous_and_admin():
     login()
     home = client.get("/")
     assert home.status_code == 200
-    assert "Ekko Script Web" in home.text
+    assert "Ekko Brand Content Strategy" in home.text
+    assert "ui-upgrade.css" in home.text
+    assert "ui-upgrade.js" in home.text
     asset = client.get("/assets/css/tokens.css")
     assert asset.status_code == 200
     assert "box-sizing" in asset.text
+    assert asset.headers["cache-control"] == "public, max-age=31536000, immutable"
+    ui_css = client.get("/assets/css/ui-upgrade.css")
+    assert ui_css.status_code == 200
+    assert "ekko-date-picker" in ui_css.text
+    ui_script = client.get("/assets/js/ui-upgrade.js")
+    assert ui_script.status_code == 200
+    assert "openPicker" in ui_script.text
 
 
 def test_disabling_a_user_revokes_existing_sessions():
     admin = login()
     username = "revoked_" + uuid4().hex[:10]
-    password = "temporary-pass-123"
+    password = "temporarypass123"
     created = client.post(
         "/api/v1/users",
         json={"username": username, "role": "editor", "password": password, "active": True},

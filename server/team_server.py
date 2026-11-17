@@ -63,7 +63,9 @@ class Handler(base.Handler):
         if not self.allowed_host():return base.respond(self,400,{'error':'无效的访问地址'})
         path=urlparse(self.path).path;ses=self.session()
         if self.serve_asset(path,ses):return
-        if path in ('/','/index.html','/admin'):
+        if path in ('/index.html','/login.html','/first-password.html') or (path=='/admin' and not ses):
+            self.send_response(302);self.send_header('Location','/');self.send_header('Cache-Control','no-cache');self.send_header('Content-Length','0');self.end_headers();return
+        if path in ('/','/admin'):
             if not ses:
                 raw=(base.PAGES/'login.html').read_bytes().replace(
                     b'</head>',
@@ -71,7 +73,10 @@ class Handler(base.Handler):
                 )
                 return base.html(self,200,raw)
             with base.LOCK,connect() as c:p=profile(c,ses['username'])
-            if p['mustChange']:return base.html(self,200,(base.PAGES/'first-password.html').read_bytes())
+            if p['mustChange']:
+                if path!='/':
+                    self.send_response(302);self.send_header('Location','/');self.send_header('Cache-Control','no-cache');self.send_header('Content-Length','0');self.end_headers();return
+                return base.html(self,200,(base.PAGES/'first-password.html').read_bytes())
             if path=='/admin' and ses['role']!='admin':return base.respond(self,403,{'error':'仅管理员可访问管理端'})
             return base.html(self,200,(base.PAGES/'index.html').read_bytes())
         if not ses:return base.respond(self,401,{'error':'请先登录'})
@@ -121,8 +126,11 @@ class Handler(base.Handler):
             if path=='/api/comments':
                 from urllib.parse import parse_qs
                 entry=parse_qs(urlparse(self.path).query).get('entry',[''])[0]
-                rows=c.execute('SELECT c.id,c.actor,p.name,c.time,c.content FROM comments c LEFT JOIN profiles p ON c.actor=p.username WHERE entry_id=? ORDER BY c.id',(entry,)).fetchall()
-                return base.respond(self,200,[dict(zip(['id','username','name','time','content'],r)) for r in rows])
+                rows=c.execute('''SELECT c.id,c.actor,p.name,c.time,c.content,
+ (SELECT count(DISTINCT actor) FROM (SELECT actor FROM likes WHERE comment_id=c.id UNION ALL SELECT actor FROM comment_likes WHERE comment_id=c.id) q),
+ EXISTS(SELECT 1 FROM (SELECT actor FROM likes WHERE comment_id=c.id UNION ALL SELECT actor FROM comment_likes WHERE comment_id=c.id) q WHERE actor=?)
+ FROM comments c LEFT JOIN profiles p ON c.actor=p.username WHERE entry_id=? ORDER BY c.id DESC''',(ses['username'],entry)).fetchall()
+                return base.respond(self,200,[dict(zip(['id','username','name','time','content','likes','liked'],[r[0],r[1],r[2],r[3],r[4],r[5],bool(r[6])])) for r in rows])
         return super().do_GET()
     def do_POST(self):
         path=urlparse(self.path).path
@@ -133,7 +141,7 @@ class Handler(base.Handler):
         if not hmac.compare_digest(self.headers.get('X-CSRF-Token',''),ses['csrf']):return base.respond(self,403,{'error':'请求校验失败'})
         with base.LOCK,connect() as c:p=profile(c,ses['username'])
         if p['mustChange'] and path not in ('/api/password','/api/logout'):return base.respond(self,403,{'error':'请先修改初始密码'})
-        if path not in ('/api/profile','/api/events/read','/api/team/update','/api/comments','/api/comments/delete','/api/comments/like','/api/entries/patch','/api/archive/restore','/api/events/read-one'):return super().do_POST()
+        if path not in ('/api/profile','/api/events/read','/api/team/update','/api/comments','/api/comments/delete','/api/comments/like','/api/entries/patch','/api/archive/restore','/api/archive/purge','/api/events/read-one'):return super().do_POST()
         try:data=self.body()
         except:return base.respond(self,400,{'error':'无效请求'})
         with base.LOCK,connect() as c:
@@ -158,6 +166,13 @@ class Handler(base.Handler):
                 version,raw=c.execute('SELECT version,entries FROM state WHERE id=1').fetchone();items=json.loads(raw or '[]');item=json.loads(row[0])
                 if any(x['id']==item['id'] for x in items):return base.respond(self,409,{'error':'同编号内容已存在'})
                 items.append(item);c.execute('UPDATE state SET version=?,entries=? WHERE id=1',(version+1,json.dumps(items,ensure_ascii=False)));c.execute('DELETE FROM archive WHERE entry_id=?',(item['id'],));base.log(c,ses['username'],'恢复归档 '+item['title']);c.commit();return base.respond(self,200,{'ok':True})
+            if path=='/api/archive/purge':
+                if ses['role']!='admin':return base.respond(self,403,{'error':'仅管理员可删除'})
+                row=c.execute('SELECT content FROM archive WHERE entry_id=?',(data.get('id'),)).fetchone()
+                if not row:return base.respond(self,404,{'error':'归档不存在'})
+                try:title=json.loads(row[0]).get('title') or ''
+                except Exception:title=''
+                c.execute('DELETE FROM archive WHERE entry_id=?',(data.get('id'),));base.log(c,ses['username'],'永久删除归档 '+title);c.commit();return base.respond(self,200,{'ok':True})
             if path in ('/api/comments/delete','/api/comments/like'):
                 if ses['role']=='viewer':return base.respond(self,403,{'error':'只读账号不能修改评价'})
                 row=c.execute('SELECT actor FROM comments WHERE id=?',(data.get('id'),)).fetchone()
@@ -208,7 +223,8 @@ class Handler(base.Handler):
         return super().body()
     def change_password(self,ses,body):
         old=body.get('current','');new=body.get('password','')
-        if not isinstance(old,str) or not base.valid_password(new) or new==old:return base.respond(self,400,{'error':'请设置至少 12 个字符且与原密码不同的新密码'})
+        if not isinstance(old,str) or not isinstance(new,str) or new==old:return base.respond(self,400,{'error':'新密码不能与当前密码相同'})
+        if not base.valid_password(new):return base.respond(self,400,{'error':'密码只能使用数字和字母'})
         with base.LOCK,connect() as c:
             row=c.execute('SELECT salt,password_hash FROM users WHERE username=? AND active=1',(ses['username'],)).fetchone()
             if not row or not hmac.compare_digest(base.password_hash(old,row[0]),row[1]):return base.respond(self,403,{'error':'当前密码不正确'})
@@ -226,6 +242,9 @@ class Handler(base.Handler):
         if body.get('password') and after and after!=before:
             with base.LOCK,connect() as c:c.execute('UPDATE profiles SET must_change=1 WHERE username=?',(body.get('username',''),));c.commit()
         return result
+    def audit_creative(self,c,ses,action,object_type,object_id):
+        meta=base.REQUEST_META.get({}) or {}
+        c.execute('INSERT INTO activity_logs(time,actor,module,action,object_type,object_id,result,ip,user_agent,repeat_count) VALUES(?,?,?,?,?,?,?,?,?,1)',(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),ses['username'],'creative',str(action)[:300],str(object_type)[:40],str(object_id)[:80],'success',str(meta.get('ip',''))[:64],str(meta.get('ua',''))[:300]))
     def save_state(self,ses,body):
         incoming=body.get('entries');v=body.get('version')
         if not isinstance(incoming,list) or not isinstance(v,int) or not all(isinstance(x,dict) and isinstance(x.get('id'),str) and isinstance(x.get('title'),str) for x in incoming):return base.respond(self,400,{'error':'记录无效'})
@@ -263,14 +282,18 @@ class Handler(base.Handler):
                 prev=old.get(id)
                 if prev and prev!=x and x.get('createdBy')!=prev.get('createdBy'):return base.respond(self,403,{'error':'内容作者不可更改'})
                 if not prev:
+                    if x.get('kind')=='图片素材':return base.respond(self,400,{'error':'图片素材库已停用'})
                     x['createdBy']=ses['username']
-                    if x.get('kind')=='图片素材':x['authorName']=profile(c,ses['username'])['name'] or ses['username']
-                elif x.get('kind')=='图片素材' and x.get('authorName')!=prev.get('authorName'):
-                    return base.respond(self,403,{'error':'素材上传者不可更改'})
                 x=media_store(c,x);new[id]=x
                 if prev!=x:
                     c.execute('INSERT INTO revisions(actor,time,entry_id,before_json,after_json) VALUES(?,?,?,?,?)',(ses['username'],now(),id,json.dumps(prev,ensure_ascii=False),json.dumps(x,ensure_ascii=False)))
-                    base.log(c,ses['username'],('新增 ' if not prev else '修改 ')+x['title'])
+                    verb='新增' if not prev else '修改'
+                    label={'开头创意':'创意钩子','产品出场':'产品出场','完整脚本':'完整脚本','图片素材':'图片素材','类型定义':'类型'}.get(x.get('kind'),'内容')
+                    base.log(c,ses['username'],verb+' '+x['title'])
+                    self.audit_creative(c,ses,f'{verb}{label} {x["title"]}',x.get('kind') or '',id)
+                    old_shots=(prev or {}).get('shots') if isinstance((prev or {}).get('shots'),list) else []
+                    new_shots=x.get('shots') if isinstance(x.get('shots'),list) else []
+                    if len(new_shots)>len(old_shots):self.audit_creative(c,ses,f'新增分镜 {x["title"]}（{len(new_shots)-len(old_shots)} 个镜头）','分镜',id)
                     if not prev:c.execute('INSERT INTO events(actor,time,kind,entry_id,title,batch_id) VALUES(?,?,?,?,?,?)',(ses['username'],now(),x.get('kind','内容'),id,x['title'],save_batch))
             for id in set(old)-set(new):
                 c.execute('INSERT OR REPLACE INTO archive VALUES(?,?,?,?)',(id,json.dumps(old[id],ensure_ascii=False),ses['username'],now()))

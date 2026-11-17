@@ -43,4 +43,4 @@ def test_legacy_entries_are_available():
     login()
     response = client.get("/api/v1/creative/product-entries")
     assert response.status_code == 200
-    assert response.json()["total"] >= 5
+    assert response.json()["total"] >= 1

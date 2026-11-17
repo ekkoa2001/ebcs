@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -112,3 +114,29 @@ async def compatibility_password(request: Request, body: PasswordInput):
 @compat_router.get("/api/session")
 def compatibility_session(request: Request):
     return session_payload(require_session(request))
+
+
+@compat_router.get("/api/bootstrap")
+def compatibility_bootstrap(request: Request):
+    """Return the data the legacy workspace needs for its first render in one request."""
+    current = require_session(request)
+    with server.LOCK, server.connect() as connection:
+        version, raw_entries = connection.execute(
+            "SELECT version, entries FROM state WHERE id=1"
+        ).fetchone()
+    return {
+        "session": session_payload(current),
+        "state": {
+            "version": version,
+            "entries": json.loads(raw_entries) if raw_entries else [],
+        },
+    }
+
+
+@compat_router.get("/api/state/version")
+def compatibility_state_version(request: Request):
+    """Small polling endpoint used to avoid repeatedly transferring all workspace data."""
+    require_session(request)
+    with server.LOCK, server.connect() as connection:
+        version = connection.execute("SELECT version FROM state WHERE id=1").fetchone()[0]
+    return {"version": version}

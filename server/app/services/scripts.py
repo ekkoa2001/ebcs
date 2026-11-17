@@ -1,5 +1,6 @@
 import json
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 
@@ -23,6 +24,13 @@ def read_legacy_entries():
 def media_id(value):
     if not isinstance(value, str) or not value:
         return None
+    # Current browser URLs are /api/v1/media/<id>/<variant>.  Keeping the
+    # trailing variant as the database id turned a valid cover into the
+    # literal id "preview", which then violated the media foreign key on
+    # application startup or any legacy-state save.
+    matched = re.search(r"/media/([^/]+)/(?:original|preview|thumbnail)(?:\?.*)?$", value)
+    if matched:
+        return matched.group(1)
     return value.rsplit("/", 1)[-1].split("?", 1)[0] or None
 
 
@@ -134,7 +142,11 @@ def synchronize_from_entries(entries, actor=""):
                 if start and end: duration = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).days + 1
             except ValueError:
                 pass
-            status = "投放结束" if end else ("正在投放" if start else "准备投放")
+            today = datetime.now(timezone(timedelta(hours=8))).date().isoformat()
+            if not start: status = "准备投放"
+            elif start > today: status = "准备投放"
+            elif end and end < today: status = "投放结束"
+            else: status = "正在投放"
             upsert(db, "ad_campaigns", campaign_id, {
                 "object_type": "script", "object_id": identifier, "legacy_key": "legacy",
                 "material_code": str(ad.get("materialCode") or item.get("code") or "")[:80], "batch": str(ad.get("batch") or "")[:80],

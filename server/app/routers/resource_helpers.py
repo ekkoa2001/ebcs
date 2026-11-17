@@ -11,12 +11,12 @@ def failure(error): raise HTTPException(status_code=error.status, detail=error.m
 def bind_resource(router, path, table, object_type):
     mutation_permission = "ad.update" if table in {"ad_campaigns", "ad_period_records"} else None
     @router.get(path)
-    def listing(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, alias="pageSize", ge=1, le=100), search: str = "", include_archived: bool = Query(False, alias="includeArchived")):
+    def listing(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, alias="pageSize", ge=1, le=100), search: str = "", include_archived: bool = Query(False, alias="includeArchived"), date_from: str = Query("", alias="dateFrom"), date_to: str = Query("", alias="dateTo")):
         current = require_session(request); require_permission(current, "content.read")
         if include_archived: require_permission(current, "content.restore")
-        reserved={"page","pageSize","search","includeArchived"}
+        reserved={"page","pageSize","search","includeArchived","dateFrom","dateTo"}
         filters={key:value for key,value in request.query_params.items() if key not in reserved}
-        return resources.list_rows(table, page, page_size, search, include_archived, filters)
+        return resources.list_rows(table, page, page_size, search, include_archived, filters, date_from, date_to)
 
     @router.get(path + "/{identifier}")
     def detail(identifier: str, request: Request):

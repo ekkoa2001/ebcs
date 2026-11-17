@@ -53,7 +53,7 @@ def log(c, actor, message):
     c.execute('INSERT INTO log(time,actor,action) VALUES(?,?,?)',(datetime.now().strftime('%Y-%m-%d %H:%M:%S'),str(actor)[:100],str(message)[:300]))
 
 def valid_name(name):return isinstance(name,str) and 1<=len(name)<=64 and all(ch.isalnum() or ch in '._-@' for ch in name)
-def valid_password(password):return isinstance(password,str) and 12<=len(password)<=200
+def valid_password(password):return isinstance(password,str) and 1<=len(password)<=200 and password.isascii() and password.isalnum()
 
 def password_hash(password,salt):return hashlib.pbkdf2_hmac('sha256',password.encode('utf-8'),salt,ITERATIONS)
 def password_matches(password,salt,stored):
@@ -74,7 +74,7 @@ def bootstrap():
     with LOCK,connect() as c:
         if c.execute('SELECT COUNT(*) FROM users').fetchone()[0]:return
         if not sys.stdin.isatty():raise SystemExit('首次启动需要在主机终端交互创建管理员。')
-        print('首次启动：请创建管理员账号。密码至少 12 个字符。',flush=True)
+        print('首次启动：请创建管理员账号。密码使用数字和字母。',flush=True)
         username=input('管理员账号（字母、数字和 . _ - @）：').strip()
         password=getpass.getpass('管理员密码（输入时不显示）：')
         confirm=getpass.getpass('再次输入密码：')
@@ -216,7 +216,8 @@ class Handler(BaseHTTPRequestHandler):
         return respond(self,200,{'version':current+1})
     def change_password(self,ses,body):
         old=body.get('current','');new=body.get('password','')
-        if not isinstance(old,str) or len(old)>200 or not valid_password(new):return respond(self,400,{'error':'新密码至少 12 个字符'})
+        if not isinstance(old,str) or len(old)>200 or new==old:return respond(self,400,{'error':'新密码不能与当前密码相同'})
+        if not valid_password(new):return respond(self,400,{'error':'密码只能使用数字和字母'})
         with LOCK,connect() as c:
             row=c.execute('SELECT salt,password_hash FROM users WHERE username=? AND active=1',(ses['username'],)).fetchone()
             if not row or not hmac.compare_digest(password_hash(old,row[0]),row[1]):return respond(self,403,{'error':'当前密码不正确'})
@@ -227,14 +228,14 @@ class Handler(BaseHTTPRequestHandler):
     def manage_user(self,ses,body,create):
         name=body.get('username','');role=body.get('role','');password=body.get('password','');active=body.get('active',True)
         if not valid_name(name) or role not in ROLES or not isinstance(active,bool):return respond(self,400,{'error':'账号或权限无效'})
-        if password and not valid_password(password):return respond(self,400,{'error':'密码至少 12 个字符'})
+        if password and not valid_password(password):return respond(self,400,{'error':'密码只能使用数字和字母'})
         with LOCK,connect() as c:
             permission=c.execute('SELECT role,active FROM users WHERE username=?',(ses['username'],)).fetchone()
             if not permission or not permission[1]:return respond(self,401,{'error':'账号已停用'})
             if permission[0]!='admin':return respond(self,403,{'error':'仅管理员可管理账号'})
             try:
                 if create:
-                    if not valid_password(password):return respond(self,400,{'error':'新账号密码至少 12 个字符'})
+                    if not valid_password(password):return respond(self,400,{'error':'密码只能使用数字和字母'})
                     create_user(c,name,password,role);log(c,ses['username'],'创建账号 '+name+'（'+role+'）')
                 else:
                     row=c.execute('SELECT username,role,active FROM users WHERE username=?',(name,)).fetchone()
@@ -267,7 +268,7 @@ def start():
     server=ThreadingHTTPServer((host,port),Handler);server.daemon_threads=True;server.allowed_hosts={x.lower() for x in allowed};server.secure=secure
     if secure:
         ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);ctx.minimum_version=ssl.TLSVersion.TLSv1_2;ctx.load_cert_chain(certfile=cert,keyfile=key);server.socket=ctx.wrap_socket(server.socket,server_side=True)
-    print('Ekko Script Web 已启动。允许的访问地址：',flush=True)
+    print('Ekko Brand Content Strategy 已启动。允许的访问地址：',flush=True)
     for name in allowed:print(('https://' if secure else 'http://')+name+':'+str(port),flush=True)
     if not secure:print('当前仅本机可访问；要在内网共享，请配置可信 HTTPS 证书。',flush=True)
     print('保持窗口开启，关闭窗口会停止服务。',flush=True);server.serve_forever()

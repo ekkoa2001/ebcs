@@ -7,6 +7,7 @@ from app.routers.resource_helpers import bind_resource
 router = APIRouter(prefix="/api/v1", tags=["content"])
 bind_resource(router, "/content/projects", "brand_content_projects", "品牌内容")
 bind_resource(router, "/content/assets", "content_assets", "内容图片")
+bind_resource(router, "/after-sales/emails", "after_sales_emails", "售后邮件")
 
 @router.post("/content/assets/{identifier}/review")
 def review_asset(identifier:str,request:Request,body:dict):
