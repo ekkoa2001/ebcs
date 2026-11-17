@@ -69,7 +69,7 @@ async def lifespan(_app: FastAPI):
         from app.sqlcompat import connect as postgres
         with postgres(settings["database_url"]) as connection:
             count = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        if count == 0:
+        if count == 0 and settings["database_path"].exists():
             from app.import_postgres import copy_database
             copy_database(settings["database_path"])
             repair_legacy_media_paths()
