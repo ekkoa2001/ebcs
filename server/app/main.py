@@ -69,6 +69,10 @@ async def lifespan(_app: FastAPI):
         from app.sqlcompat import connect as postgres
         with postgres(settings["database_url"]) as connection:
             count = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        # The cloud image deliberately excludes data/ so an empty Supabase
+        # database must not attempt to import a non-existent local SQLite
+        # backup.  Local Docker still mounts that file and retains the
+        # one-time import path for an explicit migration.
         if count == 0 and settings["database_path"].exists():
             from app.import_postgres import copy_database
             copy_database(settings["database_path"])
