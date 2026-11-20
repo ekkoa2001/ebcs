@@ -219,7 +219,7 @@ def mirror_to_legacy(identifier, archived=False):
                 "producedDate": script["produced_date"], "usedDate": script["used_date"], "videoCount": len(videos),
                 "createdBy": script["created_by"], "owner": script["owner"], "created": date, "createdTime": clock,
                 "isExample": bool(script["is_example"]), "productionStatus": script["production_status"],
-                "coverImage": f"/api/v1/media/{script['cover_media_id']}/preview" if script.get("cover_media_id") else "",
+                "coverImage": f"/api/v1/media/{script['cover_media_id']}/thumbnail" if script.get("cover_media_id") else "",
                 "shots": [{"id": row["id"], "name": row["name"], "description": row["description"], "scale": row["scale"],
                     "duration": row["duration"], "image": f"/api/v1/media/{row['media_id']}/preview" if row.get("media_id") else "",
                     "action": row["action"], "dialogue": row["dialogue"], "productInfo": row["product_info"], "notes": row["notes"]} for row in shots],

@@ -60,9 +60,11 @@ async def lifespan(_app: FastAPI):
     from app.redis_sessions import attach
     from app.object_store import ensure_bucket, repair_legacy_media_paths
     attach()
+    run_startup_sync = os.environ.get("EKKO_RUN_STARTUP_SYNC", "0") == "1"
     try:
         ensure_bucket()
-        repair_legacy_media_paths()
+        if run_startup_sync:
+            repair_legacy_media_paths()
     except Exception:
         pass
     if settings["database_url"].startswith("postgres"):
@@ -77,14 +79,16 @@ async def lifespan(_app: FastAPI):
             from app.import_postgres import copy_database
             copy_database(settings["database_path"])
             repair_legacy_media_paths()
-    from app.services.creative_hooks import synchronize_from_legacy_state
-    synchronize_from_legacy_state()
-    from app.services.product_entries import synchronize_from_legacy_state as synchronize_product_entries
-    synchronize_product_entries()
-    from app.services.scripts import synchronize_from_legacy_state as synchronize_scripts
-    synchronize_scripts()
-    from app.services.activity_backfill import backfill_creative_activity
-    backfill_creative_activity()
+            run_startup_sync = True
+    if run_startup_sync:
+        from app.services.creative_hooks import synchronize_from_legacy_state
+        synchronize_from_legacy_state()
+        from app.services.product_entries import synchronize_from_legacy_state as synchronize_product_entries
+        synchronize_product_entries()
+        from app.services.scripts import synchronize_from_legacy_state as synchronize_scripts
+        synchronize_scripts()
+        from app.services.activity_backfill import backfill_creative_activity
+        backfill_creative_activity()
     try:
         backup_database()
     except Exception:

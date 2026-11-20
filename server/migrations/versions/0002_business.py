@@ -54,11 +54,31 @@ def ordered_statements(sql: str) -> list[str]:
     return ordered + remaining
 
 
+def _sqlite_translate(stmt: str) -> str:
+    import re
+    s = re.sub(r"CREATE TABLE(?!\s+IF\s+NOT\s+EXISTS)\s+", "CREATE TABLE IF NOT EXISTS ", stmt, count=1, flags=re.I)
+    s = re.sub(r"CREATE INDEX(?!\s+IF\s+NOT\s+EXISTS)\s+", "CREATE INDEX IF NOT EXISTS ", s, count=1, flags=re.I)
+    s = re.sub(r"CREATE UNIQUE INDEX(?!\s+IF\s+NOT\s+EXISTS)\s+", "CREATE UNIQUE INDEX IF NOT EXISTS ", s, count=1, flags=re.I)
+    s = re.sub(r"\bBIGINT\s+GENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY\b", "INTEGER", s, flags=re.I)
+    s = re.sub(r"\b(?:BIGSERIAL|SERIAL)\s+PRIMARY\s+KEY\b", "INTEGER PRIMARY KEY AUTOINCREMENT", s, flags=re.I)
+    s = re.sub(r"\bBYTEA\b", "BLOB", s, flags=re.I)
+    s = re.sub(r"\bDOUBLE\s+PRECISION\b", "REAL", s, flags=re.I)
+    s = re.sub(r"\bBOOLEAN\b", "INTEGER", s, flags=re.I)
+    s = re.sub(r"\bDEFAULT\s+true\b", "DEFAULT 1", s, flags=re.I)
+    s = re.sub(r"\bDEFAULT\s+false\b", "DEFAULT 0", s, flags=re.I)
+    return s
+
+
 def upgrade():
     bind = op.get_bind()
+    schema = Path(__file__).resolve().parents[2] / "app" / "pg_schema.sql"
+    if bind.dialect.name == "sqlite":
+        for statement in ordered_statements(schema.read_text(encoding="utf-8")):
+            if statement.strip().upper().startswith(("CREATE TABLE", "CREATE INDEX", "CREATE UNIQUE INDEX")):
+                op.execute(_sqlite_translate(statement))
+        return
     if bind.dialect.name != "postgresql":
         return
-    schema = Path(__file__).resolve().parents[2] / "app" / "pg_schema.sql"
     for statement in ordered_statements(schema.read_text(encoding="utf-8")):
         op.execute(statement)
 

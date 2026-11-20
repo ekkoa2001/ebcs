@@ -117,8 +117,9 @@ async def dispatch(request: Request, path: str | None = None) -> Response:
     # those assets aggressively so a normal refresh does not re-download or
     # re-parse the same scripts and styles.  API, HTML, login and media
     # responses deliberately keep their existing cache behaviour.
-    if request.method == "GET" and request.url.path in {"/", "/index.html", "/login.html", "/admin"}:
-        response.headers["Cache-Control"] = "no-cache"
+    if request.method == "GET" and request.url.path in {"/", "/index.html", "/login.html", "/first-password.html", "/admin"}:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
     static_suffixes = (".js", ".css", ".woff2", ".woff", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico")
     if request.method == "GET" and request.url.path.lower().endswith(static_suffixes):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
