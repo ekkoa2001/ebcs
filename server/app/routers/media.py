@@ -7,9 +7,66 @@ from sqlalchemy import text
 from app.database import SessionLocal
 from app.dependencies import require_permission, require_session
 from app.dependencies import require_csrf
-from app.object_store import get_object, list_objects, put_object
+from app.object_store import get_object, list_objects, presign_put, put_object
 
 router = APIRouter(prefix="/api/v1", tags=["media"])
+
+
+@router.post("/media/presign")
+def presign_media(body: dict, request: Request):
+    current = require_session(request); require_csrf(request, current); require_permission(current, "content.create")
+    digest = str(body.get("sha256") or "").strip().lower()
+    mime = str(body.get("mime") or "").strip().lower()
+    byte_size = int(body.get("byte_size") or 0)
+    width = int(body.get("width") or 0)
+    height = int(body.get("height") or 0)
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    if len(digest) != 64 or mime not in ext_map or byte_size < 1 or byte_size > 25 * 1024 * 1024 or width < 1 or height < 1 or width * height > 80_000_000:
+        raise HTTPException(400, "图片参数无效或超过 25 MB")
+    with SessionLocal() as db:
+        found = db.execute(text("SELECT * FROM media_files WHERE sha256=:sha LIMIT 1"), {"sha": digest}).first()
+        if found:
+            return {**dict(found._mapping), "deduplicated": True, "directEnabled": False}
+    ext = ext_map[mime]
+    original = f"originals/{digest}.{ext}"; preview = f"previews/{digest}.webp"; thumbnail = f"thumbnails/{digest}.webp"
+    orig_url = presign_put(original, mime)
+    prev_url = presign_put(preview, "image/webp")
+    thumb_url = presign_put(thumbnail, "image/webp")
+    if not (orig_url and prev_url and thumb_url):
+        return {"directEnabled": False, "deduplicated": False}
+    return {
+        "directEnabled": True,
+        "deduplicated": False,
+        "id": digest,
+        "keys": {"original": original, "preview": preview, "thumbnail": thumbnail},
+        "urls": {"original": orig_url, "preview": prev_url, "thumbnail": thumb_url},
+    }
+
+
+@router.post("/media/complete")
+def complete_media(body: dict, request: Request):
+    current = require_session(request); require_csrf(request, current); require_permission(current, "content.create")
+    digest = str(body.get("sha256") or "").strip().lower()
+    mime = str(body.get("mime") or "").strip().lower()
+    byte_size = int(body.get("byte_size") or 0)
+    width = int(body.get("width") or 0)
+    height = int(body.get("height") or 0)
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    if len(digest) != 64 or mime not in ext_map or byte_size < 1 or width < 1 or height < 1:
+        raise HTTPException(400, "图片元数据无效")
+    with SessionLocal() as db:
+        found = db.execute(text("SELECT * FROM media_files WHERE sha256=:sha LIMIT 1"), {"sha": digest}).first()
+        if found:
+            return {**dict(found._mapping), "deduplicated": True}
+        ext = ext_map[mime]
+        original = f"originals/{digest}.{ext}"; preview = f"previews/{digest}.webp"; thumbnail = f"thumbnails/{digest}.webp"
+        now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+        db.execute(
+            text("INSERT INTO media_files(id,mime,sha256,byte_size,width,height,original_path,preview_path,thumbnail_path,created_at) VALUES(:id,:mime,:sha,:size,:w,:h,:original,:preview,:thumb,:created)"),
+            {"id": digest, "mime": mime, "sha": digest, "size": byte_size, "w": width, "h": height, "original": original, "preview": preview, "thumb": thumbnail, "created": now},
+        )
+        db.commit()
+    return {"id": digest, "mime": mime, "sha256": digest, "byte_size": byte_size, "width": width, "height": height, "original_path": original, "preview_path": preview, "thumbnail_path": thumbnail, "created_at": now, "deduplicated": False}
 
 
 @router.get("/media")

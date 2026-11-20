@@ -40,6 +40,18 @@ def put_object(key, mime, raw):
     store.put_object(Bucket=bucket, Key=key, Body=raw, ContentType=mime or "application/octet-stream")
 
 
+def presign_put(key, mime, expires=300):
+    store = client()
+    bucket = _settings()
+    if not store or not bucket:
+        return None
+    return store.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": bucket, "Key": key, "ContentType": mime or "application/octet-stream"},
+        ExpiresIn=expires,
+    )
+
+
 def get_object(key):
     store = client()
     bucket = _settings()
